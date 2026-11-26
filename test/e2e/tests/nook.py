@@ -38,7 +38,7 @@ import pexpect
 import gfxrecords as gr
 from fakevdp import KEYMOD_ALT_LEFT
 from harness import (PROMPT, VDP_CONFIG_SYS, heap_at_prompt,
-                     message_args_reports, ps_entries)
+                     message_args_reports, ps_entries, settled)
 from tests.graphics import (ACQUIRE, RELEASE, assert_pixels, glyph_pixels,
                             wait_set_up)
 from tests.vdp_drv import VDP_FONT_ID
@@ -140,7 +140,8 @@ def run_nook(vdp, options="", demo=True):
     @return The number of context commands FakeVdp had received before.
     """
     base = len(vdp.context_events())
-    vdp.type(("nook " + ("--demo " if demo else "") + options).strip() + "\r")
+    vdp.type(("nook --finish " + ("--demo " if demo else "") + options).strip()
+             + "\r")
     assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
     if demo:
         wait_pixels(vdp, {corner_point(FRAMES[2]): TITLE_BAR})
@@ -669,7 +670,7 @@ def outline_then_live(session, options, start, end, grabbed, outline):
     wait_canvas(vdp, with_outline(pressed, outline))
     vdp.mouse(*end)
     wait_pixels(vdp, {corner_point(outline): TITLE_BAR})
-    time.sleep(1)
+    settle(vdp)
     after = bytes(vdp.canvas)
     base = restart_nook(session, base, "--move=live --resize=live")
     assert bytes(vdp.canvas) == initial
@@ -746,19 +747,20 @@ def test_nook_gives_back_all_the_memory_it_used(session):
     vdp = session.vdp
     vdp_login_as(vdp, "root", "rootroot")
     heaps = []
-    for _run in range(18):
+    for _run in range(24):
         base = run_nook(vdp, "--content=call --move=live")
         drag(vdp, (300, 45), (390, 255))
         wait_pixels(vdp, window_points(moved(FRAMES[1], 90, 210), BODIES[1]))
         quit_nook(session, base)
         vdp.expect(PROMPT + "$")
-        heaps.append(heap_at_prompt(session))
-    # The first runs fill the kernel's caches, fragment the heap, and give
-    # long-lived processes a capability entry for each PID the free queue hands
-    # out in turn; free memory then swings by up to 32 bytes with the shells'
-    # own state.  A leak of 16 bytes a run loses 96 over the six runs between
-    # these windows.
-    assert min(heaps[15:18]) >= min(heaps[9:12]) - 48, heaps
+        heaps.append(settled(lambda: heap_at_prompt(session)))
+    # The first ten or so runs fill the kernel's caches, fragment the heap, and
+    # give long-lived processes a capability entry for each PID the free queue
+    # hands out in turn; free memory then holds, or cycles by up to 80 bytes
+    # with the shells' own state, and dips for a run when an allocation takes
+    # a whole free block.  A leak lowers every run after it, the best of a
+    # window too:  16 bytes a run loses 128 over the eight runs between these.
+    assert max(heaps[18:24]) >= max(heaps[10:16]) - 48, heaps
     check_clean(session)
 
 
@@ -834,10 +836,12 @@ def allocations(session, pids):
 
     @return A sorted list of (pid, size).
     """
-    owned = re.findall(r"^  0x[0-9a-f]+: (\d+) bytes owned by (\d+)$",
-                       session.sh("dumpMemoryAllocations"), re.M)
-    return sorted((int(pid), int(size)) for size, pid in owned
-                  if int(pid) in pids)
+    def sample():
+        owned = re.findall(r"^  0x[0-9a-f]+: (\d+) bytes owned by (\d+)$",
+                           session.sh("dumpMemoryAllocations"), re.M)
+        return sorted((int(pid), int(size)) for size, pid in owned
+                      if int(pid) in pids)
+    return settled(sample)
 
 
 def kill_client(session):
@@ -860,7 +864,8 @@ def test_nook_killed_clients_leave_nothing_behind(session):
     before = allocations(session, owners)
     for _client in range(16):
         kill_client(session)
-    assert allocations(session, owners) == before
+    after = allocations(session, owners)
+    assert after == before, (before, after)
     assert session.sh("wintest hello") == HELLO
     quit_nook(session, base)
     check_clean(session)
@@ -1045,6 +1050,8 @@ def test_nook_a_killed_client_takes_its_windows_with_it(session):
     points = face_points((40, 40, 200, 100))
     points.update(face_points((150, 90, 200, 120)))
     wait_pixels(vdp, points)
+    # Printed in the background, it could split the echo of ps.
+    expect_line(session, "FOCUS 2 activated")
     output = session.sh("kill %d" % wintest_pid(session))
     assert output.startswith("Termination of process"), output
     wait_canvas(vdp, initial)
@@ -1086,19 +1093,23 @@ def drawing(vdp):
     return tuple(vdp.count_events(kind) for kind in ("plot", "gcol", "gtext"))
 
 
-def settle(vdp, quiet=0.5, timeout=15):
-    """Wait until FakeVdp has received no drawing commands for a while.
+def settle(vdp, quiet=0.5, timeout=30, frames=True):
+    """Wait until FakeVdp has received no drawing commands for a while and,
+    unless what is drawn isn't sysnook's frames, until the last frame drawn
+    has been finished, which sysnook's --finish makes it do.
 
     @param vdp The FakeVdp.
     @param quiet Seconds without a drawing command.
     @param timeout Seconds to wait in all.
+    @param frames Whether to wait for the last frame to be finished.
 
     @return The drawing command counts at the end.
     """
     deadline = time.time() + timeout
     last = drawing(vdp)
     since = time.time()
-    while time.time() - since < quiet:
+    while (time.time() - since < quiet) or \
+            (frames and not vdp.frame_finished()):
         assert time.time() < deadline, "FakeVdp is still being drawn on"
         time.sleep(0.05)
         now = drawing(vdp)
@@ -1388,9 +1399,10 @@ def test_nook_a_double_click_on_a_title_bar_maximizes(session):
     expect_line(session, "wintest: window 1")
     expect_line(session, "FOCUS 1 activated")
     wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
-    # Two clicks 600 ms apart are two clicks.
+    # Two clicks a second apart are two clicks.  sysnook times a press when
+    # it handles it, so the gap leaves room for the first to be handled late.
     click(vdp, (100, 45))
-    time.sleep(0.6)
+    time.sleep(1.0)
     click(vdp, (100, 45))
     assert session.child.expect([pexpect.TIMEOUT, r"\S"], timeout=2) == 0, \
         session.child.after

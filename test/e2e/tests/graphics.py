@@ -273,6 +273,7 @@ def test_graphics_closing_the_display_frees_it(s):
     assert lines == [driver_line(s), OPENED, "gfxprobe: close no error"], \
         lines
     assert status == 0
+    s.vdp.wait_context_events(base + 6)
     assert s.vdp.context_events()[base:] == (ACQUIRE + RELEASE) * 2
     assert_vdp_font(s.vdp)
 
@@ -1110,6 +1111,26 @@ CURSOR_PIXELS = bytes([WHITE_2222, BLACK_2222, 0, 0,
 CURSOR_ROWS = ["WB..", "BWB.", ".BWB", "..BW"]
 
 
+def wait_pointer(vdp, image, hotspot=None, timeout=15):
+    """Wait until the pointer shows an image, and has a hotspot if one is
+    given:  the driver draws it on the VDP's link, which FakeVdp reads apart
+    from UART1.
+
+    @param vdp The FakeVdp.
+    @param image The rows pointer_image returns.
+    @param hotspot The (column, row) pointer_hotspot returns, or None not to
+      check it.
+    @param timeout Seconds to wait.
+    """
+    deadline = time.time() + timeout
+    while (vdp.pointer_image() != image) or \
+            ((hotspot is not None) and (vdp.pointer_hotspot() != hotspot)):
+        assert time.time() < deadline, (vdp.pointer_image(),
+                                        vdp.pointer_hotspot())
+        with vdp.lock:
+            vdp.lock.wait(0.1)
+
+
 def test_graphics_an_image_becomes_the_cursor_with_its_hotspot(session):
     boot_with_files(session, {"p": CURSOR_PIXELS})
     lines = own(session, "image rgba2222 4 4 /etc/p cursor 0xf200 2 1")
@@ -1119,17 +1140,16 @@ def test_graphics_an_image_becomes_the_cursor_with_its_hotspot(session):
     assert session.vdp.pointer_image() == CURSOR_ROWS
     assert session.vdp.pointer_hotspot() == (2, 1)
     disown(session)
-    assert session.vdp.pointer_image() == ["."]
+    wait_pointer(session.vdp, ["."])
 
 
 def test_graphics_the_pointer_shows_only_while_the_display_is_owned(session):
     boot_with_files(session, {})
     assert session.vdp.pointer_image() == ["."]
     start_owner(session, "hold")
-    assert session.vdp.pointer_image() == VDP_POINTER
-    assert session.vdp.pointer_hotspot() == (0, 0)
+    wait_pointer(session.vdp, VDP_POINTER, (0, 0))
     disown(session)
-    assert session.vdp.pointer_image() == ["."]
+    wait_pointer(session.vdp, ["."])
 
 
 def mouse_disables(vdp):
@@ -1160,7 +1180,7 @@ def test_graphics_hiding_the_cursor_never_disables_the_mouse(session):
     assert session.vdp.pointer_image() == ["."]
     assert mouse_disables(session.vdp) == disables
     disown(session)
-    assert session.vdp.pointer_image() == ["."]
+    wait_pointer(session.vdp, ["."])
 
 
 def test_graphics_warping_moves_the_pointer_and_reports_it(session):

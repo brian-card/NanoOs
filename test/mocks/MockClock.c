@@ -15,8 +15,14 @@
 /// @brief The current virtual time, in nanoseconds since boot.
 static uint64_t _nowNs = 0;
 
+/// @var _stepNs
+///
+/// @brief How far the virtual time moves each time the kernel reads it.
+static uint64_t _stepNs = 0;
+
 void mockClockReset(void) {
   _nowNs = 0;
+  _stepNs = 0;
 }
 
 uint64_t mockClockNowNs(void) {
@@ -25,6 +31,10 @@ uint64_t mockClockNowNs(void) {
 
 void mockClockAdvanceNs(uint64_t deltaNs) {
   _nowNs += deltaNs;
+}
+
+void mockClockSetStepNs(uint64_t stepNs) {
+  _stepNs = stepNs;
 }
 
 int mockClockInitFn(int32_t deviceId, va_list args) {
@@ -51,6 +61,7 @@ static int elapsed(va_list args, uint64_t divisor) {
   if (returnValue == NULL) {
     return -1;
   }
+  _nowNs += _stepNs;
   int64_t scaledNow = (int64_t) (_nowNs / divisor);
   *returnValue = scaledNow - startTime;
   return 0;

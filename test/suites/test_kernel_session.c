@@ -37,6 +37,7 @@
 #include "HalMock.h"
 
 #include <string.h>
+#include <unistd.h>
 
 #include "kernel/Console.h"
 #include "kernel/Processes.h"
@@ -122,11 +123,12 @@ static int tryOpen(ProcessId display) {
 /// "server" registers as the window server and tries to open a session on
 /// displayPid once it's set; "intruder", an executive process, gives itself
 /// the grant to open a session and tries; "user" tries; "display" runs as
-/// another user.
+/// another user; "quit" exits.
 ///
 /// @param args The ExecArgs of the spawn.
 ///
-/// @return This function returns NULL for "exit" and never returns otherwise.
+/// @return This function returns NULL for "exit" and "quit" and never returns
+/// otherwise.
 static void* program(void *args) {
   ExecArgs *execArgs = (ExecArgs*) args;
   const char *mode = execArgs->argv[0];
@@ -166,6 +168,8 @@ static void* program(void *args) {
   } else if (strcmp(mode, "display") == 0) {
     self->userId = ROOT_USER_ID + 1;
     reported = true;
+  } else if (strcmp(mode, "quit") == 0) {
+    return NULL;
   }
   while (1) {
     processYield();
@@ -868,6 +872,135 @@ NANO_OS_KERNEL_TEST_WITH(session,
     processYield();
   }
   NANO_OS_ASSERT_STR_EQ("ab", forwardedTo[1]);
+}
+
+/// @var driverPid
+///
+/// @brief The slot of the driver of the port driverPreBoot adds.
+static volatile ProcessId driverPid = PROCESS_ID_NOT_SET;
+
+/// @var driverPortId
+///
+/// @brief The port driverPreBoot adds, or -1.
+static volatile int driverPortId = -1;
+
+/// @var echoHeld
+///
+/// @brief Whether stalledDriver has the console's echo and hasn't finished it.
+static volatile bool echoHeld;
+
+/// @var driverStalled
+///
+/// @brief Whether stalledDriver keeps the console's echo unfinished.
+static volatile bool driverStalled = true;
+
+/// @fn static void* stalledDriver(void *args)
+///
+/// @brief Stand in for a device console's driver that types a byte and then
+/// is slow to draw its echo:  it keeps the console's first string unfinished
+/// while driverStalled is set, then records it and every one after.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* stalledDriver(void *args) {
+  (void) args;
+  static ConsoleInputReadyArgs inputArgs;
+  inputArgs.portId = (uint8_t) driverPortId;
+  inputArgs.numBytes = 1;
+  inputArgs.bytes[0] = 'x';
+  ProcessMessage *typed = getAvailableMessage();
+  if (typed != NULL) {
+    processMessageInit(typed, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
+      &inputArgs, sizeof(inputArgs), /* waiting= */ true);
+    if (sendProcessMessageToPid(consolePid, typed) != processSuccess) {
+      processMessageRelease(typed);
+    }
+  }
+  ProcessMessage *echo = processMessageQueueWait(NULL);
+  echoHeld = true;
+  while (driverStalled) {
+    processYield();
+  }
+  recordForward(0, echo);
+  while (1) {
+    recordForward(0, processMessageQueueWait(NULL));
+  }
+  return NULL;
+}
+
+/// @fn static int startDriver(ProcessDescriptor *processDescriptor)
+///
+/// @brief Run stalledDriver in its slot when the slot's boot process exits,
+/// as a restartFunction, so that the slot keeps the grants the scheduler
+/// gave it.
+///
+/// @param processDescriptor A pointer to the slot's ProcessDescriptor.
+///
+/// @return Returns 0 on success, -ENOMEM on failure.
+static int startDriver(ProcessDescriptor *processDescriptor) {
+  if (processCreate(processDescriptor, stalledDriver, NULL) != processSuccess) {
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->restartFunction = NULL;
+  return 0;
+}
+
+/// @fn static int addDriverPort(void)
+///
+/// @brief Have the scheduler add a device console's port whose driver, which
+/// services both its input and its output, is the first user slot.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int addDriverPort(void) {
+  driverPid = schedulerGetFirstShellPid() + schedulerGetNumShells();
+  allProcesses[driverPid - 1].restartFunction = startDriver;
+  driverPortId = schedulerAddForwardingPort(driverPid, PROCESS_ID_NOT_SET,
+    0, 0);
+  return (driverPortId >= 0) ? 0 : driverPortId;
+}
+
+/// @fn static void driverPreBoot(void)
+///
+/// @brief Add a device console's port at launch, with stalledDriver as its
+/// driver, and run spawned programs as program.
+///
+/// @return This function returns no value.
+static void driverPreBoot(void) {
+  halMockSetExecCommand(program);
+  halMockSetLaunchHook(addDriverPort);
+}
+
+NANO_OS_KERNEL_TEST_WITH(session,
+  an_exit_while_a_driver_is_slow_to_draw_an_echo_doesnt_hang, driverPreBoot
+) {
+  NANO_OS_ASSERT_TRUE(driverPortId >= 0);
+  for (int ii = 0; (ii < MAX_YIELDS) && !echoHeld; ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_TRUE(echoHeld);
+  // A hang here never comes back to this process, so it ends the test.
+  alarm(10);
+  mockClockSetStepNs(100000ULL);
+  pid_t pid = 0;
+  char *argv[] = { "quit", NULL };
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawn(&pid, "/usr/bin/program", NULL, NULL, argv, NULL));
+  for (int ii = 0; (ii < MAX_YIELDS) && processRunning(&allProcesses[pid - 1]);
+    ii++
+  ) {
+    processYield();
+  }
+  NANO_OS_ASSERT_FALSE(processRunning(&allProcesses[pid - 1]));
+  NANO_OS_ASSERT_TRUE(numPortsBy(5) > 0);
+  alarm(0);
+  driverStalled = false;
+  for (int ii = 0; (ii < MAX_YIELDS) && (forwardedTo[0][0] == '\0'); ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_STR_EQ("x", forwardedTo[0]);
 }
 
 /// @def SERVER_PATH

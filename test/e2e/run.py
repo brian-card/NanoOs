@@ -41,7 +41,9 @@ CLOSE_TIME_LIMIT = 30
 # cache passes call file overlays through the overlay file cache.  The checked
 # pass runs the simulator built with the message-argument checker; any report
 # it prints fails the test.  The bridge pass runs BRIDGE_MODULES' tests with
-# each login's shell in a console session that sessiontest bridges to UART1.
+# each login's shell in a console session that sessiontest bridges to UART1,
+# and the term pass runs them with each login's shell in a term in Nook,
+# typed into on the FakeVdp's keyboard.
 SIM_CONFIGS = [
     ("nano-os-sim_stripped", "nano-os-sim_stripped", {}),
     ("nano-os-sim", "nano-os-sim", {}),
@@ -51,6 +53,7 @@ SIM_CONFIGS = [
     ("nano-os-sim-cache", "nano-os-sim", {"NANO_OS_SIM_FILE_CACHE": "1"}),
     ("nano-os-sim-checked", "nano-os-sim-checked", {}),
     ("nano-os-sim-bridge", "nano-os-sim", {harness.BRIDGE_VARIABLE: "1"}),
+    ("nano-os-sim-term", "nano-os-sim", {harness.TERM_VARIABLE: "1"}),
 ]
 
 # The modules whose tests the bridge pass runs:  the ones that drive a console
@@ -70,6 +73,29 @@ BRIDGE_CANNOT = {
     "test_pipelines_return_their_memory":
         "greps every process, and the bridge's are among them",
 }
+
+
+# Tests in BRIDGE_MODULES that can't run in term, and why.
+TERM_CANNOT = dict(BRIDGE_CANNOT, **{
+    "test_failed_pipelines_leave_no_processes_input_or_memory_behind":
+        "lists every process, and Nook's and term's are among them",
+    "test_pipelines_return_their_memory":
+        "greps every process, and Nook's and term's are among them",
+    "test_a_resize_report_arrives_in_one_read":
+        "types a resize report as one burst, which keys can't be",
+    "test_vi_redraws_for_a_resize_report":
+        "types a resize report as one burst, which keys can't be",
+    "test_vi_shows_the_cursor_position_on_the_status_line":
+        "types a resize report as one burst, which keys can't be",
+    "test_typed_ahead_lines_both_run_in_order":
+        "types two lines as one burst, which keys can't be",
+    "test_line_editor_keeps_lines_typed_ahead":
+        "types two lines as one burst, which keys can't be",
+    "test_mush_help_leaves_the_user_logged_in":
+        "compares the heap, which sysnook and term use meanwhile",
+    "test_failed_background_launches_release_their_slots":
+        "compares the heap, which sysnook and term use meanwhile",
+})
 
 
 def build_image():
@@ -252,6 +278,8 @@ def run_case(i, label, sim_bin, env, test_module, test_name, image,
     s = None
     if (harness.BRIDGE_VARIABLE in (env or {})) and (test_name in BRIDGE_CANNOT):
         return [f"ok {i} - {label} # SKIP {BRIDGE_CANNOT[test_name]}"], False
+    if (harness.TERM_VARIABLE in (env or {})) and (test_name in TERM_CANNOT):
+        return [f"ok {i} - {label} # SKIP {TERM_CANNOT[test_name]}"], False
     try:
         signal.alarm(TEST_TIME_LIMIT)
         s = Session(sim_bin, image, env)
@@ -299,7 +327,8 @@ def main(argv):
     for config_name, sim_name, env in SIM_CONFIGS:
         sim_bin = os.path.join(REPO_ROOT, "sim", "bin", sim_name)
         for t in TESTS:
-            if (harness.BRIDGE_VARIABLE in env) \
+            if ((harness.BRIDGE_VARIABLE in env)
+                    or (harness.TERM_VARIABLE in env)) \
                     and (t.__module__ not in BRIDGE_MODULES):
                 continue
             label = f"{config_name}/{t.__name__}"

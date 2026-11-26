@@ -195,6 +195,13 @@ uint64_t mockClockNowNs(void);
 /// @fn void mockClockAdvanceNs(uint64_t deltaNs)
 void mockClockAdvanceNs(uint64_t deltaNs);
 
+/// @fn void mockClockSetStepNs(uint64_t stepNs)
+///
+/// @brief Move the virtual clock on by stepNs each time the kernel reads it,
+/// so that timed waits end while no test process runs to move it.  0, the
+/// default, leaves it still.
+void mockClockSetStepNs(uint64_t stepNs);
+
 /// @fn int mockTimerFire(int32_t deviceId)
 ///
 /// @brief Invoke the armed one-shot callback for deviceId and disarm it.

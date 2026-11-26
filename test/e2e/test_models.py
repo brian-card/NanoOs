@@ -487,5 +487,85 @@ class FakeVdpCanvasTest(unittest.TestCase):
                          self.vdp.errors)
 
 
+class FakeVdpGridColourTest(unittest.TestCase):
+    """The colours of the fake VDP's console text grid."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.vdp = FakeVdp(os.path.join(self.directory.name, "vdp"),
+                           answer=False)
+
+    def tearDown(self):
+        self.vdp.close()
+        self.directory.cleanup()
+
+    def send(self, data):
+        """Have the fake VDP read bytes.
+
+        @param data The bytes.
+        """
+        self.vdp._read(BytesConnection(data))
+
+    def test_text_colours_set_the_colours_of_each_cell_drawn(self):
+        self.send([17, RED, 17, 128 + BLUE] + list(b"ab") + [17, WHITE]
+                  + list(b"c"))
+        self.assertEqual([("a", RED, BLUE), ("b", RED, BLUE),
+                          ("c", WHITE, BLUE), (" ", WHITE, BLACK)],
+                         self.vdp.grid_cells()[0][:4])
+
+    def test_the_bell_draws_nothing(self):
+        self.send(list(b"a\x07b"))
+        self.assertEqual("ab", self.vdp.grid_lines()[0])
+        self.assertEqual(1, self.vdp.count_events("bell"))
+
+    def test_clearing_and_scrolling_blank_with_the_background(self):
+        last = self.vdp.grid_rows - 1
+        self.send([17, 128 + BLUE, 12, 31, 0, 1, 17, RED] + list(b"x")
+                  + [31, 0, last, 17, 128 + RED, 10])
+        cells = self.vdp.grid_cells()
+        self.assertEqual([("x", RED, BLUE), (" ", WHITE, BLUE)], cells[0][:2])
+        self.assertEqual([(" ", WHITE, BLUE)] * 2, cells[1][:2])
+        self.assertEqual([(" ", RED, RED)] * self.vdp.grid_columns,
+                         cells[last])
+
+
+class FakeVdpReadCellsTest(unittest.TestCase):
+    """Reading characters and colours back from the fake VDP's canvas."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.vdp = FakeVdp(os.path.join(self.directory.name, "vdp"),
+                           answer=False)
+        glyphs = []
+        for code in range(256):
+            glyphs += [code & 0xFC, (code & 0x03) << 6, 0x80] + [0] * 5
+        self.send([23, 0, 0xC0, 0, 23, 0, 0xA0] + word(0xF100) + [0]
+                  + word(len(glyphs)) + glyphs + [23, 0, 0x95, 1]
+                  + word(0xF100) + [6, 8, 8, 0])
+        self.send([5, 23, 16, 0x40, 0xBF, 23, 0, 0x95, 0] + word(0xF100)
+                  + [0])
+
+    def tearDown(self):
+        self.vdp.close()
+        self.directory.cleanup()
+
+    def send(self, data):
+        """Have the fake VDP read bytes.
+
+        @param data The bytes.
+        """
+        self.vdp._read(BytesConnection(data))
+
+    def test_text_drawn_on_the_canvas_reads_back_exactly(self):
+        self.send([18, 0, BLUE] + plot(4, 12, 16) + plot(0x65, 12 + 24 - 1,
+                                                          16 + 8 - 1))
+        self.send([18, 0, RED] + plot(4, 12, 16) + list(b"Ab")
+                  + [18, 0, WHITE] + list(b"c"))
+        self.assertEqual([[("A", RED, BLUE), ("b", RED, BLUE),
+                           ("c", WHITE, BLUE), (" ", None, BLUE)]],
+                         self.vdp.read_cells(12, 16, 4, 1, 0xF100))
+        self.assertEqual([], self.vdp.errors)
+
+
 if __name__ == "__main__":
     unittest.main()

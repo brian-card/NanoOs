@@ -58,6 +58,12 @@ import threading
 import time
 
 GENERAL_POLL = 0x80
+
+# The cookies of the polls the driver sends to finish a frame.
+FINISH_POLL_COOKIES = range(0x50, 0x80)
+
+# The kinds of event a frame draws with.
+DRAWING_KINDS = ("plot", "gcol", "gtext")
 KEYCODE_SPACE = 1
 KEYCODE_0 = 2
 KEYCODE_a = 22
@@ -216,6 +222,7 @@ class FakeVdp:
         self.first_poll = None
         self.polls = []        # times of the general polls received
         self.poll_cookies = [] # their cookies
+        self.finish_polls = [] # len(events) at each poll that finished a frame
         self.answered = None   # time of the first poll answered
         self.events = []       # (time, kind, detail) once listening
         self.screen = ""       # text drawn since the last clear
@@ -398,6 +405,9 @@ class FakeVdp:
                     with self.lock:
                         self.grid = [[" "] * self.grid_columns
                                      for _ in range(self.grid_rows)]
+                        self.grid_colours = [
+                            [self._grid_colour()] * self.grid_columns
+                            for _ in range(self.grid_rows)]
                         self._fill(self.gviewport, self.gbg, self.gbg_mode)
                         self._push_point(0, 0)
                         self.lock.notify_all()
@@ -925,6 +935,8 @@ class FakeVdp:
         with self.lock:
             self.polls.append(now)
             self.poll_cookies.append(cookie)
+            if cookie in FINISH_POLL_COOKIES:
+                self.finish_polls.append(len(self.events))
             if self.first_poll is None:
                 self.first_poll = now
             due = self.answer and (now - self.first_poll >= self.answer_after)
@@ -1015,20 +1027,30 @@ class FakeVdp:
         with self.lock:
             left, top, right, bottom = self.viewport or (
                 0, 0, self.grid_columns - 1, self.grid_rows - 1)
-            rows = [self.grid[row][left:right + 1]
-                    for row in range(top, bottom + 1)]
-            blank = [" "] * (right - left + 1)
-            if direction == SCROLL_DOWN:
-                rows = [blank] + rows[:-1]
-            else:
-                rows = rows[1:] + [blank]
-            for row, cells in zip(range(top, bottom + 1), rows):
-                self.grid[row][left:right + 1] = cells
+            for grid, blank in ((self.grid, " "),
+                                (self.grid_colours, self._grid_colour())):
+                rows = [grid[row][left:right + 1]
+                        for row in range(top, bottom + 1)]
+                blanks = [blank] * (right - left + 1)
+                if direction == SCROLL_DOWN:
+                    rows = [blanks] + rows[:-1]
+                else:
+                    rows = rows[1:] + [blanks]
+                for row, cells in zip(range(top, bottom + 1), rows):
+                    grid[row][left:right + 1] = cells
             self.lock.notify_all()
         self._event("scroll", direction)
 
+    def _grid_colour(self):
+        """Return the (foreground, background) a cell drawn or blanked now
+        gets:  the text colours."""
+        return (getattr(self, "text_fg", DEFAULT_TEXT_FG),
+                getattr(self, "text_bg", DEFAULT_TEXT_BG))
+
     def _grid_clear(self):
         self.grid = [[" "] * self.grid_columns for _ in range(self.grid_rows)]
+        self.grid_colours = [[self._grid_colour()] * self.grid_columns
+                             for _ in range(self.grid_rows)]
         self.grid_row = self.grid_column = 0
 
     def _grid_line_feed(self):
@@ -1037,6 +1059,9 @@ class FakeVdp:
         else:
             del self.grid[0]
             self.grid.append([" "] * self.grid_columns)
+            del self.grid_colours[0]
+            self.grid_colours.append([self._grid_colour()]
+                                     * self.grid_columns)
 
     def _grid_draw(self, ch):
         """Draw a glyph on the grid the way the VDP does.  With scroll
@@ -1046,6 +1071,8 @@ class FakeVdp:
             self.grid_column = 0
             self._grid_line_feed()
         self.grid[self.grid_row][self.grid_column] = ch
+        self.grid_colours[self.grid_row][self.grid_column] = (
+            self._grid_colour())
         self.grid_column += 1
         held = (self.cursor_behaviour & 1) and (
             self.grid_row == self.grid_rows - 1)
@@ -1073,6 +1100,9 @@ class FakeVdp:
         if self.vdu5 and (byte < 32 or byte == 127):
             self.errors.append(f"control code {byte} at the graphics cursor")
             self._event("control", byte)
+            return
+        if byte == 7:
+            self._event("bell")
             return
         if byte not in (8, 10, 13):
             self._glyph(byte)
@@ -1437,6 +1467,18 @@ class FakeVdp:
                                      row * SCREEN_WIDTH + left + width])
                     for row in range(top, top + height)]
 
+    def frame_finished(self):
+        """Return whether a poll that finishes a frame has arrived since the
+        last drawing command, which the driver sends only once the frame's
+        commands have all been sent."""
+        with self.lock:
+            if not self.finish_polls:
+                return False
+            for _time, kind, _detail in self.events[self.finish_polls[-1]:]:
+                if kind in DRAWING_KINDS:
+                    return False
+            return True
+
     def count_events(self, kind):
         """Return how many events of a kind have been received."""
         with self.lock:
@@ -1468,6 +1510,91 @@ class FakeVdp:
         """Return each row of the grid without trailing spaces."""
         with self.lock:
             return ["".join(row).rstrip() for row in self.grid]
+
+    def grid_cells(self):
+        """Return each row of the grid as (character, foreground,
+        background) per cell, the colours as palette indices."""
+        with self.lock:
+            return [[(ch, fg, bg) for ch, (fg, bg) in zip(row, colours)]
+                    for row, colours in zip(self.grid, self.grid_colours)]
+
+    def glyph_table(self, font_id):
+        """Map each distinct glyph of a font to a character code that draws
+        it, preferring printable ASCII, then control codes, then the rest.
+
+        @param font_id The font's ID.
+
+        @return A dictionary of glyph (a tuple of row bit patterns, the
+          leftmost column the highest bit of a width-bit number) to code.
+        """
+        with self.lock:
+            width, height, data = self.fonts[font_id]
+        row_bytes = (width + 7) // 8
+        shift = row_bytes * 8 - width
+        table = {}
+        for code in (list(range(32, 127)) + list(range(32))
+                     + list(range(127, 256))):
+            start = code * row_bytes * height
+            glyph = tuple(
+                int.from_bytes(data[start + y * row_bytes:
+                                    start + (y + 1) * row_bytes], "big")
+                >> shift for y in range(height))
+            table.setdefault(glyph, code)
+        return table
+
+    def read_cells(self, left, top, columns, rows, font_id):
+        """Read characters and colours back from the canvas by matching
+        each cell of a rectangle against a font's glyphs.
+
+        @param left The rectangle's left pixel.
+        @param top The rectangle's top pixel.
+        @param columns The number of cells across.
+        @param rows The number of cells down.
+        @param font_id The ID of the font the cells were drawn in.
+
+        @return A list of rows, each a list of (character, foreground,
+          background) per cell.  A cell of one colour is a space whose
+          foreground is None, and a cell no glyph matches has the character
+          None.
+        """
+        with self.lock:
+            width, height, _data = self.fonts[font_id]
+        table = self.glyph_table(font_id)
+        pixels = self.pixels(left, top, columns * width, rows * height)
+        cells = []
+        for row in range(rows):
+            line = []
+            for column in range(columns):
+                cell = [pixels[row * height + y][column * width:
+                                                 (column + 1) * width]
+                        for y in range(height)]
+                line.append(self._read_cell(cell, width, table))
+            cells.append(line)
+        return cells
+
+    @staticmethod
+    def _read_cell(cell, width, table):
+        """Match one cell's pixels against a glyph table.
+
+        @param cell The cell's rows of palette indices.
+        @param width The cell's width.
+        @param table What glyph_table returned.
+
+        @return (character, foreground, background).
+        """
+        colours = sorted({pixel for row in cell for pixel in row})
+        if len(colours) == 1:
+            return (" ", None, colours[0])
+        if len(colours) != 2:
+            return (None, None, None)
+        for foreground, background in (colours, colours[::-1]):
+            glyph = tuple(
+                sum(1 << (width - 1 - x) for x, pixel in enumerate(row)
+                    if pixel == foreground)
+                for row in cell)
+            if glyph in table:
+                return (chr(table[glyph]), foreground, background)
+        return (None, None, None)
 
     def wait_grid(self, check, timeout=15):
         """Wait until the grid passes a check.
@@ -1662,6 +1789,23 @@ class FakeVdp:
         for ch in text:
             self.key(ch)
             time.sleep(0.01)
+
+    def type_paced(self, text, reaction=0.5):
+        """Type a string, each key once the last has made the simulator send
+        something, as its echo does, or after reaction seconds, so that keys
+        never pile up in the driver's queue, which drops what doesn't fit.
+
+        @param text The characters to type.
+        @param reaction The most seconds to wait after a key.
+        """
+        for ch in text:
+            with self.lock:
+                count = len(self.events)
+            self.key(ch)
+            deadline = time.time() + reaction
+            with self.lock:
+                while (len(self.events) == count) and (time.time() < deadline):
+                    self.lock.wait(0.02)
 
     def disconnect(self):
         """Drop the current connection, as if the VDP had gone away."""

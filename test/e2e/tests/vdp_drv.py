@@ -329,11 +329,7 @@ def test_vdp_pointer_goes_away_once_the_mouse_is_unplugged(s):
     vdp.mouse_plugged_in = False
     vdp.disconnect()
     vdp.wait_connections(2)
-    deadline = time.time() + 10
-    while sum(kind == "cls" for _t, kind, _d in vdp.events) < 2:
-        assert time.time() < deadline, \
-            "the restarted driver never set up the screen"
-        time.sleep(0.1)
+    wait_vdp_screen_setups(vdp, 2)
     vdp.type("root\r")
     vdp.expect("password: ")
     assert not vdp.mouse_enabled, "the mouse is still enabled with none plugged in"
@@ -346,11 +342,8 @@ def test_vdp_driver_is_restarted_after_losing_the_vdp(s):
     vdp_login(vdp)
     vdp.disconnect()
     vdp.wait_connections(2)
-    deadline = time.time() + 10
-    while sum(kind == "cls" for _t, kind, _d in vdp.events) < 2:
-        assert time.time() < deadline, "the restarted driver never set up the screen"
-        time.sleep(0.1)
-    vdp.type("echo after-restart\r")
+    wait_vdp_screen_setups(vdp, 2)
+    vdp.type_paced("echo after-restart\r")
     vdp.expect(r"\r\nafter-restart\r\n" + PROMPT)
     pointers = sum(kind == "pointer" for _t, kind, _d in vdp.events)
     assert pointers == 2, f"the pointer was set {pointers} times, not 2"
@@ -387,28 +380,27 @@ def test_vdp_driver_restarts_after_losing_the_vdp_mid_output(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
     vdp.type("cat /etc/catfile\r")
+    vdp.expect(r"cat /etc/catfile\r\n")
     vdp.disconnect()
     vdp.wait_connections(2)
-    deadline = time.time() + 10
-    while sum(kind == "cls" for _t, kind, _d in vdp.events) < 2:
-        assert time.time() < deadline, \
-            "the restarted driver never set up the screen"
-        time.sleep(0.1)
+    wait_vdp_screen_setups(vdp, 2)
     for n in range(6):
-        vdp.type("echo round-%d\r" % n)
+        vdp.type_paced("echo round-%d\r" % n)
         vdp.expect(r"\r\nround-%d\r\n" % n + PROMPT)
     s.login()
     assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
 
 
 def wait_vdp_screen_setups(vdp, count):
-    """Wait until a FakeVdp's screen has been set up a number of times.
+    """Wait until a FakeVdp's screen has been set up a number of times, which
+    each driver's handshake ends by loading the font; clears don't count them,
+    since getty's clear at boot isn't repeated by a restart.
 
     @param vdp The FakeVdp.
     @param count The number of setups to wait for.
     """
     deadline = time.time() + 10
-    while sum(kind == "cls" for _t, kind, _d in vdp.events) < count:
+    while sum(kind == "font" for _t, kind, _d in vdp.events) < count:
         assert time.time() < deadline, \
             "the restarted driver never set up the screen"
         time.sleep(0.1)

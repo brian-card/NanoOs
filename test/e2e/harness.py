@@ -27,6 +27,7 @@
 """The session and helpers the end-to-end tests share."""
 
 import datetime
+import io
 import os
 import re
 import shutil
@@ -90,7 +91,116 @@ BRIDGE_CONFIG_SYS = (
 BRIDGE_VARIABLE = "NANO_OS_E2E_BRIDGE"
 
 
+# The GRAPHICS line a Session whose logins run the shell in term boots with.
+TERM_NOOK_LINE = "GRAPHICS=/system/drivers/vdp.drv /system/commands/sysnook\n"
+
+
+# A line of the kernel's log.
+TERM_LOG_LINE = re.compile(r"\[\d+\.\d+ [^\]]*\][^\n]*\n?")
+
+
+# The least seconds between keys typed into term, once the last key has made
+# the session print something other than its echo.
+TERM_KEY_SECONDS = 0.07
+
+
+# The most seconds to wait for a key typed into term to make the session print
+# something, as a key that echoes nothing doesn't.
+TERM_REACTION_SECONDS = 0.5
+
+
+# The palette index of the desktop sysnook paints.
+TERM_DESKTOP = 3
+
+
+# The environment variable that makes a Session's logins run the shell in
+# term:  Nook is started on the FakeVdp's console, and term on UART1, where it
+# writes what the session prints.
+TERM_VARIABLE = "NANO_OS_E2E_TERM"
+
+
 VERBOSE = False
+
+
+class TermChild:
+    """The UART1 child of a Session whose logins run the shell in term:  what
+    a test sends is typed on the FakeVdp's keyboard, which the window server
+    sends term's session, and what it expects is read from UART1, where term
+    writes what the session prints."""
+
+    def __init__(self, child, vdp):
+        """@param child The pexpect child on UART1.
+        @param vdp The FakeVdp whose keyboard types into term."""
+        object.__setattr__(self, "child", child)
+        object.__setattr__(self, "vdp", vdp)
+
+    def send(self, text):
+        """Type text, one key at a time, each once the last has been echoed or
+        has made the session print something, so that keys never pile up in
+        vdp.drv's queue, which drops what doesn't fit."""
+        for ch in text:
+            self.vdp.key(ch)
+            self._await_reaction("\n" if ch == "\r" else ch)
+        return len(text)
+
+    def _await_reaction(self, echo):
+        """Wait until echo is printed, or until anything is printed and
+        TERM_KEY_SECONDS have passed, or for TERM_REACTION_SECONDS, keeping
+        what is read for the next expect.
+
+        @param echo The text the key typed echoes.
+        """
+        child = self.child
+        start = time.time()
+        seen = ""
+        while True:
+            elapsed = time.time() - start
+            if (echo in seen) or (seen and elapsed >= TERM_KEY_SECONDS):
+                return
+            if elapsed >= TERM_REACTION_SECONDS:
+                return
+            try:
+                data = child.read_nonblocking(4096, timeout=0.02)
+            except pexpect.TIMEOUT:
+                continue
+            except pexpect.EOF:
+                return
+            seen += data
+            # expect searches both of these, so what is read ahead goes in
+            # both.
+            child.buffer = child.buffer + data
+            child._before.seek(0, io.SEEK_END)
+            child._before.write(data)
+
+    def sendline(self, text=""):
+        """Type a line and Return."""
+        return self.send(text + "\r")
+
+    def sendcontrol(self, ch):
+        """Type Ctrl and a letter."""
+        self.vdp.ctrl(ch.lower())
+        return 1
+
+    def sendintr(self):
+        """Type Ctrl-C."""
+        self.vdp.ctrl("c")
+
+    def read_nonblocking(self, size=1, timeout=-1):
+        """Read what send read ahead for expect, if any is left, or else read
+        from the child."""
+        child = self.child
+        pending = child.buffer
+        if not pending:
+            return child.read_nonblocking(size, timeout)
+        child.buffer = ""
+        child._before = child.buffer_type()
+        return pending
+
+    def __getattr__(self, name):
+        return getattr(self.child, name)
+
+    def __setattr__(self, name, value):
+        setattr(self.child, name, value)
 
 
 # Heap, in bytes, left at the shell prompt in the small-memory tests:  a little
@@ -176,6 +286,7 @@ class Session:
         self.sim_bin = sim_bin
         self.env = env
         self.bridged = (env or {}).get(BRIDGE_VARIABLE) == "1"
+        self.termed = (env or {}).get(TERM_VARIABLE) == "1"
         self.transcript = Transcript()
         self.tmp = tempfile.mkdtemp(prefix=SESSION_DIR_PREFIX)
         img_copy = os.path.join(self.tmp, "disk.img")
@@ -186,7 +297,10 @@ class Session:
         _open_sessions.add(self)
         if self.bridged:
             self._copy_in("/system/data/config.sys", BRIDGE_CONFIG_SYS)
-        self.spawn([img_copy])
+        if self.termed:
+            self._boot_with_vdp(VDP_CONFIG_SYS + TERM_NOOK_LINE)
+        else:
+            self.spawn([img_copy])
 
     def spawn(self, args):
         # codec_errors="replace": a misbehaving simulator can emit bytes that
@@ -201,7 +315,7 @@ class Session:
     def _refuse_reboot(self):
         """Skip a test that boots a configuration of its own when it would
         replace the bridge's."""
-        if self.bridged:
+        if self.bridged or self.termed:
             raise SkipTest("boots a configuration of its own")
 
     def restart_with_memory(self, memory_size):
@@ -246,13 +360,26 @@ class Session:
         @return The FakeVdp.
         """
         self._refuse_reboot()
+        return self._boot_with_vdp(config_sys, **kwargs)
+
+    def _boot_with_vdp(self, config_sys, **kwargs):
+        """Boot with vdp.drv serving a console on a new FakeVdp.
+
+        @param config_sys The /system/data/config.sys to boot with.
+        @param kwargs Arguments for FakeVdp.
+
+        @return The FakeVdp.
+        """
         if self.vdp is not None:
             self.vdp.close()
         self.vdp = FakeVdp(os.path.join(self.tmp, "vdp.sock"), **kwargs)
         # Like the Agon's, UART0 drops what its receive ring has no room for.
         self.env = dict(self.env or {}, NANO_OS_SIM_UART0=self.vdp.path,
                         NANO_OS_SIM_UART0_DROP="1")
-        self.restart_with_config_sys(config_sys)
+        if self.child is not None and self.child.isalive():
+            self.child.terminate(force=True)
+        self._copy_in("/system/data/config.sys", config_sys)
+        self.spawn([self.img_copy])
         return self.vdp
 
     def wait_login_prompt(self):
@@ -272,12 +399,50 @@ class Session:
             # The history holds only the command that started the bridge, which
             # a console's fresh login wouldn't have.
             self.sh("rm $HOME/.mush_history")
+        elif self.termed:
+            self._start_term(user, password)
+
+    def _start_term(self, user, password):
+        """Log in on the FakeVdp's console, start Nook there, start term on
+        UART1, and drive term's session from then on.
+
+        @param user The user name.
+        @param password The password.
+        """
+        vdp = self.vdp
+        vdp.expect("login: ", timeout=30)
+        vdp.type(user + "\r")
+        vdp.expect("password: ")
+        vdp.type(password + "\r")
+        vdp.expect(PROMPT, timeout=15)
+        acquired = len(vdp.context_events())
+        vdp.type("nook\r")
+        vdp.wait_context_events(acquired + 1, timeout=30)
+        # sysnook registers as the window server once it has painted the
+        # desktop.
+        deadline = time.time() + 30
+        while vdp.pixel(639, 479) != TERM_DESKTOP:
+            assert time.time() < deadline, "sysnook never painted the desktop"
+            time.sleep(0.1)
+        time.sleep(1)
+        self.child.sendline("term --tee --plain --size=80x24 --at=0,0")
+        self.child.expect_exact("term --tee", timeout=10)
+        self.child.expect(PROMPT, timeout=30)
+        self.child = TermChild(self.child, vdp)
+        # The history holds the commands that started Nook and term, which a
+        # console's fresh login wouldn't have.
+        self.sh("rm $HOME/.mush_history")
 
     def sh(self, command, timeout=10):
         self.child.sendline(command)
         self.child.expect_exact(command, timeout=timeout)
         self.child.expect(PROMPT, timeout=timeout)
-        return self.child.before.replace("\r", "").strip("\n")
+        output = self.child.before.replace("\r", "")
+        if self.termed:
+            # The kernel's log shares UART1 with what term writes there, and
+            # isn't the session's output.
+            output = TERM_LOG_LINE.sub("", output)
+        return output.strip("\n")
 
     def close(self):
         c = self.child
@@ -328,6 +493,26 @@ def ll_names(s, path):
     names = [m.group("name") for m in (LS_LINE_RE.match(line)
              for line in out.splitlines()) if m is not None]
     return sorted(n for n in names if n not in ("./", "../"))
+
+
+def settled(sample, attempts=6):
+    """Take a measurement of the heap until two in a row agree.  The first
+    after other commands can count the scheduler's copy of the overlay path
+    the shell last ran, which has another length than the measuring
+    command's own.
+
+    @param sample A function that takes the measurement.
+    @param attempts The most measurements to take after the first.
+
+    @return The last measurement.
+    """
+    last = sample()
+    for _attempt in range(attempts):
+        now = sample()
+        if now == last:
+            break
+        last = now
+    return last
 
 
 def heap_at_prompt(s):
