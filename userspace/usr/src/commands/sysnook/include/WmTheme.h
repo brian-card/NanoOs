@@ -153,4 +153,22 @@
 /// @brief The colour of the close button's face under the pointer.
 #define WM_CLOSE_HOT 0xFF5555FF
 
+/// @def WM_ANSI_COLORS
+///
+/// @brief The 16 ANSI colours a text grid's attributes index, black to
+/// bright white:  the CGA colours ansiToCgaMap gives each, so that a terminal
+/// looks as the VDP console does.
+#define WM_ANSI_COLORS { \
+  CGA_BLACK, CGA_RED, CGA_GREEN, CGA_BROWN, \
+  CGA_BLUE, CGA_MAGENTA, CGA_CYAN, CGA_LIGHT_GRAY, \
+  CGA_DARK_GRAY, CGA_LIGHT_RED, CGA_LIGHT_GREEN, CGA_YELLOW, \
+  CGA_LIGHT_BLUE, CGA_LIGHT_MAGENTA, CGA_LIGHT_CYAN, CGA_WHITE, \
+}
+
+/// @def WM_GRID_FACE
+///
+/// @brief The colour of the body of a window with a text grid:  ANSI black,
+/// a grid's default background.
+#define WM_GRID_FACE CGA_BLACK
+
 #endif // WM_THEME_H
