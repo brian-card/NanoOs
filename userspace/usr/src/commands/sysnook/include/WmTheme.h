@@ -71,6 +71,12 @@
 /// @brief The width and height of a caption button's glyph.
 #define WM_GLYPH_SIZE 7
 
+/// @def WM_RESTORE_OFFSET
+///
+/// @brief How far the restore glyph's two boxes are apart, across and down,
+/// and how much smaller than the glyph each is.
+#define WM_RESTORE_OFFSET 2
+
 /// @def WM_FRAME_TOP
 ///
 /// @brief How far below a decorated window's top its body starts:  the
