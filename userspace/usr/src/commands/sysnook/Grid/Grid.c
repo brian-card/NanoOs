@@ -35,12 +35,6 @@
 
 #include "Wm.h"
 
-/// @def WM_BLANK_ATTRIBUTE
-///
-/// @brief The attribute of the cells a resize adds:  bright white on black,
-/// as the VDP console's text starts.
-#define WM_BLANK_ATTRIBUTE 0x0F
-
 /// @fn static void wmGridCursor(WmGrid *grid)
 ///
 /// @brief Swap the colours of the cell under a text grid's cursor, if it is
@@ -56,7 +50,8 @@ static void wmGridCursor(WmGrid *grid) {
   ) {
     uint8_t *attribute = &grid->cells[(size_t) grid->rows * grid->columns
       + (size_t) grid->cursorRow * grid->columns + grid->cursorColumn];
-    *attribute = (uint8_t) ((*attribute << 4) | (*attribute >> 4));
+    *attribute = WIN_ATTRIBUTE(WIN_ATTRIBUTE_BACKGROUND(*attribute),
+      WIN_ATTRIBUTE_FOREGROUND(*attribute));
   }
 }
 
@@ -314,7 +309,8 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
   uint8_t rows = (uint8_t) place.h;
   wmGridCursor(grid);
   if ((columns != grid->columns) || (rows != grid->rows)) {
-    uint8_t *cells = (uint8_t*) malloc((size_t) columns * rows * 2);
+    uint8_t *cells
+      = (uint8_t*) malloc((size_t) columns * rows * WM_GRID_PLANES);
     if (cells != NULL) {
       size_t plane = (size_t) columns * rows;
       size_t oldPlane = (size_t) grid->columns * grid->rows;

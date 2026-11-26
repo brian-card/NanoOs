@@ -330,7 +330,7 @@ static void wmClientDrain(void) {
     void *data = processMessageData(message);
     bool waiting = processMessageWaiting(message);
     if ((waiting == false) && (data != NULL)
-      && ((type & ~((int64_t) 0xff)) == WIN_COMMAND_SIGNATURE)
+      && ((type & ~WIN_MSG_TYPE_MASK) == WIN_COMMAND_SIGNATURE)
       && (type != (WIN_COMMAND_SIGNATURE | WIN_MSG_CLIENT_ENDED))
     ) {
       MESSAGE_ARGS_DESTROY(data);

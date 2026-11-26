@@ -509,7 +509,7 @@ static bool flushGrid(WmState *state, WmGrid *grid) {
       CONSOLE_SET_WINSIZE, grid->winsizeArgs, sizeof(*grid->winsizeArgs));
   }
   if (grid->reportWanted) {
-    char report[24];
+    char report[WM_GRID_HOLD + 1];
     int length = snprintf(report, sizeof(report), "\033[48;%u;%u;%u;%ut",
       (unsigned int) grid->rows, (unsigned int) grid->columns,
       (unsigned int) (grid->rows * state->display.builtInFont.glyphH),
@@ -629,7 +629,7 @@ void* wmInput(void *args) {
     key(state, event);
   } else if (state->restoreOnDrag && (state->grab == WM_GRAB_MOVE)) {
     restoreUnderPointer(state, event->x);
-  } else if ((event->buttons & 1) != 0) {
+  } else if ((event->buttons & GFX_BUTTON_LEFT) != 0) {
     press(state, event->x, event->y);
   } else if (state->grab != WM_GRAB_NONE) {
     release(state, event->x, event->y);
