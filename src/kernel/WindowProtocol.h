@@ -899,6 +899,16 @@ typedef enum WinGridOperation {
   WIN_GRID_REPORTS,
 } WinGridOperation;
 
+/// @def WIN_GRID_MAX_COLUMNS
+///
+/// @brief The most columns a text grid has.
+#define WIN_GRID_MAX_COLUMNS UINT8_MAX
+
+/// @def WIN_GRID_MAX_ROWS
+///
+/// @brief The most rows a text grid has.
+#define WIN_GRID_MAX_ROWS 64
+
 /// @def WIN_ANSI_NUM_COLORS
 ///
 /// @brief The number of ANSI colour indexes a text grid attribute uses.
