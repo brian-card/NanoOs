@@ -122,6 +122,18 @@
 /// console is still reading the last ones it was sent.
 #define WM_GRID_HOLD 32
 
+/// @def WM_GRID_PLANES
+///
+/// @brief The number of planes of a text grid's cells:  its characters, then
+/// their attributes.
+#define WM_GRID_PLANES 2
+
+/// @def WM_BLANK_ATTRIBUTE
+///
+/// @brief The attribute of the cells a new or resized grid adds:  bright
+/// white on black, as the VDP console's text starts.
+#define WM_BLANK_ATTRIBUTE WIN_ATTRIBUTE(WIN_ANSI_BRIGHT_WHITE, WIN_ANSI_BLACK)
+
 /// @def WM_GRID_MAX_ROWS
 ///
 /// @brief The most rows a text grid has, which its dirty bits cover.
@@ -804,7 +816,7 @@ WM_SHARED void wmDamageDecorations(WmState *state, uint8_t id) {
     { frame->x + frame->w - WM_BORDER, frame->y, WM_BORDER, frame->h },
     { frame->x, frame->y + frame->h - WM_BORDER, frame->w, WM_BORDER },
   };
-  for (uint8_t ii = 0; ii < 4; ii++) {
+  for (uint8_t ii = 0; ii < sizeof(sides) / sizeof(sides[0]); ii++) {
     wmDamage(state, &sides[ii]);
   }
 }
@@ -975,8 +987,8 @@ WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
   place->h = height / state->display.builtInFont.glyphH;
   if (place->w < 1) {
     place->w = 1;
-  } else if (place->w > 255) {
-    place->w = 255;
+  } else if (place->w > UINT8_MAX) {
+    place->w = UINT8_MAX;
   }
   if (place->h < 1) {
     place->h = 1;
