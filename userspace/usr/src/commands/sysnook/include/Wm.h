@@ -316,6 +316,7 @@ typedef struct WmWindow {
 /// @param winsizeWanted Whether the session's size is to be sent the
 ///   console.
 /// @param resized Whether the body changed size since the grid followed it.
+/// @param coversBody Whether the grid's cells cover the whole of the body.
 /// @param noBlit Whether the scrolls since the last frame can't be painted
 ///   by moving pixels.
 /// @param scroll The rows the pixels of scrollTop to scrollBottom move up
@@ -352,6 +353,7 @@ typedef struct WmGrid {
   bool                   reportWanted;
   bool                   winsizeWanted;
   bool                   resized;
+  bool                   coversBody;
   bool                   noBlit;
   int8_t                 scroll;
   uint8_t                scrollTop;
@@ -950,7 +952,7 @@ WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
   }
 }
 
-/// @fn static void wmGridPlace(WmState *state, const WmWindow *window,
+/// @fn static bool wmGridPlace(WmState *state, const WmWindow *window,
 ///   GfxRect *place)
 ///
 /// @brief Find where a window's text grid is on the screen and how many
@@ -962,8 +964,9 @@ WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
 /// @param place Where to store the grid's top-left corner, in screen
 ///   coordinates, and its columns and rows as w and h.
 ///
-/// @return This function returns no value.
-WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
+/// @return Returns true if the cells cover the whole of the body, false
+/// otherwise.
+WM_SHARED bool wmGridPlace(WmState *state, const WmWindow *window,
   GfxRect *place
 ) {
   const WmGrid *grid = (const WmGrid*) window->content;
@@ -995,6 +998,9 @@ WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
   } else if (place->h > WM_GRID_MAX_ROWS) {
     place->h = WM_GRID_MAX_ROWS;
   }
+  return (grid->rect.x == 0) && (grid->rect.y == 0)
+    && (place->w * state->display.builtInFont.glyphW == body.w)
+    && (place->h * state->display.builtInFont.glyphH == body.h);
 }
 
 /// @fn static void wmGridDirty(WmState *state, WmGrid *grid, uint8_t first,
