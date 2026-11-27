@@ -32,11 +32,11 @@
 /// out into the records that bring the screen up to date.  Entered once per
 /// frame.
 
-#include "WmCells.h"
+#include "Wm.h"
 
 /// @def WM_OUTLINE
 ///
-/// @brief The colour an outline is drawn with, by XOR.
+/// @brief The color an outline is drawn with, by XOR.
 #define WM_OUTLINE CGA_WHITE
 
 /// @def WM_ELLIPSIS_LENGTH
@@ -58,72 +58,31 @@ static __attribute__((noinline)) bool meets(
   return wmIntersect(rect, clip, &overlap);
 }
 
-/// @fn static void fill(GfxCmdBuf *cmd, GfxColor colour, int16_t left,
+/// @fn static void fill(GfxCmdBuf *cmd, GfxColor color, int16_t left,
 ///   int16_t top, int16_t width, int16_t height)
 ///
-/// @brief Record a filled rectangle of a colour.
+/// @brief Record a filled rectangle of a color.
 ///
 /// @param cmd The command buffer.
-/// @param colour The colour.
+/// @param color The color.
 /// @param left The rectangle's left edge.
 /// @param top The rectangle's top edge.
 /// @param width The rectangle's width.
 /// @param height The rectangle's height.
 ///
 /// @return This function returns no value.
-static void fill(GfxCmdBuf *cmd, GfxColor colour, int16_t left,
+static void fill(GfxCmdBuf *cmd, GfxColor color, int16_t left,
   int16_t top, int16_t width, int16_t height
 ) {
   GfxRect rect = { left, top, width, height };
-  gfxCmdSetFgColor(cmd, colour);
+  gfxCmdSetFgColor(cmd, color);
   gfxCmdDrawRect(cmd, &rect, true);
-}
-
-/// @fn static void paintCells(WmState *state, const WmWindow *window,
-///   GfxPoint origin, const GfxRect *clip)
-///
-/// @brief Record the rows of a window's cells that meet a rectangle, by
-/// calling their preloads or by sending their records.
-///
-/// @param state The window manager's state.
-/// @param window The window.
-/// @param origin Where the body's top-left corner is.
-/// @param clip The rectangle being painted.
-///
-/// @return This function returns no value.
-static __attribute__((noinline)) void paintCells(
-  WmState *state, const WmWindow *window,
-  GfxPoint origin, const GfxRect *clip
-) {
-  GfxCmdBuf *cmd = state->cmd;
-  uint8_t rows = (window->cells + WM_CELL_COLUMNS - 1) / WM_CELL_COLUMNS;
-  bool moved = false;
-  for (uint8_t row = 0; row < rows; row++) {
-    GfxRect band = { origin.x, origin.y + (int16_t) (row * WM_CELL_SIZE),
-      WM_CELL_COLUMNS * WM_CELL_SIZE, WM_CELL_SIZE };
-    if (!meets(&band, clip)) {
-      continue;
-    }
-    if (!state->contentByCall) {
-      wmRecordRow(cmd, row, window->cells, origin, clip);
-      continue;
-    }
-    if (!moved) {
-      gfxCmdSetOrigin(cmd, origin);
-      moved = true;
-    }
-    gfxCmdCall(cmd, state->rows[row]);
-  }
-  if (moved) {
-    GfxPoint home = { 0, 0 };
-    gfxCmdSetOrigin(cmd, home);
-  }
 }
 
 /// @fn static void line(GfxCmdBuf *cmd, int16_t fromX, int16_t fromY,
 ///   int16_t toX, int16_t toY)
 ///
-/// @brief Record a line in the foreground colour.
+/// @brief Record a line in the foreground color.
 ///
 /// @param cmd The command buffer.
 /// @param fromX The column of one end.
@@ -145,14 +104,14 @@ static __attribute__((noinline)) void line(
 ///   uint8_t button, GfxColor bar, GfxColor ink)
 ///
 /// @brief Record one of a window's caption buttons and its 7x7 glyph:  on
-/// the title bar's colour, pressed while it's held down with the pointer on
+/// the title bar's color, pressed while it's held down with the pointer on
 /// it, and light, or light red for close, under the pointer.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
 /// @param button The WmButton.
-/// @param bar The colour of the title bar.
-/// @param ink The colour of the title bar's text.
+/// @param bar The color of the title bar.
+/// @param ink The color of the title bar's text.
 ///
 /// @return This function returns no value.
 static __attribute__((noinline)) void paintButton(
@@ -209,7 +168,7 @@ static __attribute__((noinline)) void paintButton(
 ///
 /// @brief Record a decorated window's border, title bar, title and caption
 /// buttons, each only if it meets the rectangle being painted, in the accent
-/// colour if it's active and grey if not.  A title too long for the space
+/// color if it's active and gray if not.  A title too long for the space
 /// before the buttons ends with "...".
 ///
 /// @param state The window manager's state.
@@ -282,14 +241,14 @@ static __attribute__((noinline)) void paintTitle(
 
 /// @var _ansiColors
 ///
-/// @brief The colour of each ANSI colour index a text grid's attributes use.
+/// @brief The color of each ANSI color index a text grid's attributes use.
 static const GfxColor _ansiColors[WIN_ANSI_NUM_COLORS] = WM_ANSI_COLORS;
 
 /// @fn static void drawRun(GfxCmdBuf *cmd, int16_t left, int16_t top,
 ///   const uint8_t *text, uint8_t length)
 ///
 /// @brief Record a run of a text grid's characters, which have no
-/// terminator, in the foreground colour.
+/// terminator, in the foreground color.
 ///
 /// @param cmd The command buffer.
 /// @param left The run's left edge.
@@ -368,10 +327,11 @@ static __attribute__((noinline)) void paintGrid(
 /// @fn static void paintWindow(WmState *state, const WmWindow *window,
 ///   const GfxRect *clip)
 ///
-/// @brief Record a window's decorations, body and cells, inside its frame,
-/// leaving out what doesn't meet the rectangle being painted.  Under a text
-/// grid, only the grid's margins are filled with the body's colour, so that
-/// no cell shows it between its old colours and its new.
+/// @brief Record a window's decorations and body, and through the Widgets
+/// overlay its widgets, inside its frame, leaving out what doesn't meet the
+/// rectangle being painted.  Under a text grid, only the grid's margins are
+/// filled with the body's color, so that no cell shows it between its old
+/// colors and its new.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
@@ -405,8 +365,11 @@ static __attribute__((noinline)) void paintWindow(
       paintGrid(state, window, clip);
     } else {
       fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
-      GfxPoint origin = { body.x, body.y };
-      paintCells(state, window, origin, clip);
+      if (window->widgets != NULL) {
+        WmPaintJob job = { state, window, clip };
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Widgets",
+          "wmWidgetsPaint", &job);
+      }
     }
   }
   gfxCmdPopScissor(cmd);
@@ -438,8 +401,9 @@ static __attribute__((noinline)) bool covered(
 
 /// @fn static void paintRect(WmState *state, const GfxRect *rect)
 ///
-/// @brief Record the desktop and every shown window that meets a rectangle,
-/// back to front, inside the rectangle.
+/// @brief Record the desktop, every shown window and the open menu that meet
+/// a rectangle, back to front, inside the rectangle:  only the menu if the
+/// rectangle is inside it.
 ///
 /// @param state The window manager's state.
 /// @param rect The rectangle.
@@ -454,11 +418,15 @@ static void paintRect(WmState *state, const GfxRect *rect) {
     return;
   }
   gfxCmdPushScissor(cmd, &clip);
-  if (!covered(state, &clip)) {
+  const GfxRect *menu = &state->menu.rect;
+  bool inMenu = state->menu.open && (clip.x >= menu->x) && (clip.y >= menu->y)
+    && (clip.x + clip.w <= menu->x + menu->w)
+    && (clip.y + clip.h <= menu->y + menu->h);
+  if (!inMenu && !covered(state, &clip)) {
     gfxCmdSetBgColor(cmd, WM_DESKTOP);
     gfxCmdClear(cmd);
   }
-  for (uint8_t ii = 0; ii < state->numWindows; ii++) {
+  for (uint8_t ii = 0; !inMenu && (ii < state->numWindows); ii++) {
     const WmWindow *window = &state->windows[ii];
     if ((window->state != WIN_STATE_MINIMIZED)
       && meets(&window->frame, &clip)
@@ -466,7 +434,36 @@ static void paintRect(WmState *state, const GfxRect *rect) {
       paintWindow(state, window, &clip);
     }
   }
+  if (state->menu.open && meets(&state->menu.rect, &clip)) {
+    WmPaintJob job = { state, NULL, &clip };
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "MenuPaint",
+      "wmMenusPaintDropdown", &job);
+  }
   gfxCmdPopScissor(cmd);
+}
+
+/// @fn static void paintOwned(WmState *state, const GfxRect *rect,
+///   uint8_t owner)
+///
+/// @brief Record a rectangle of damage:  one where a window's own contents
+/// changed, which the Restack overlay has cut down to where the window
+/// shows, is repainted with that window alone; any other is repainted with
+/// everything in it.
+///
+/// @param state The window manager's state.
+/// @param rect The rectangle.
+/// @param owner The identifier of the window whose contents changed, or 0.
+///
+/// @return This function returns no value.
+static void paintOwned(WmState *state, const GfxRect *rect, uint8_t owner) {
+  WmWindow *window = wmFind(state, owner);
+  if (window == NULL) {
+    paintRect(state, rect);
+    return;
+  }
+  gfxCmdPushScissor(state->cmd, rect);
+  paintWindow(state, window, rect);
+  gfxCmdPopScissor(state->cmd);
 }
 
 /// @fn static void xorOutline(GfxCmdBuf *cmd, const GfxRect *outline)
@@ -515,8 +512,18 @@ static void paintFrame(WmState *state) {
         (int16_t) state->display.height };
       paintRect(state, &screen);
     } else {
+      uint8_t top = state->windows[state->numWindows - 1].id;
+      bool hidden = false;
       for (uint8_t ii = 0; ii < state->numDamage; ii++) {
-        paintRect(state, &state->damage[ii]);
+        hidden = hidden || ((state->damageOwner[ii] != 0)
+          && ((state->damageOwner[ii] != top) || state->menu.open));
+      }
+      if (hidden) {
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Restack", "wmOcclude",
+          state);
+      }
+      for (uint8_t ii = 0; ii < state->numDamage; ii++) {
+        paintOwned(state, &state->damage[ii], state->damageOwner[ii]);
       }
     }
     state->paintAll = false;
@@ -541,6 +548,10 @@ static void paintFrame(WmState *state) {
 void* wmPaint(void *args) {
   WmState *state = (WmState*) args;
   state->status = GFX_OK;
+  if ((state->refocus[0] | state->refocus[1] | state->raised) != 0) {
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Restack", "wmRestack",
+      state);
+  }
   paintFrame(state);
   return args;
 }

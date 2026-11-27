@@ -37,18 +37,6 @@
 #include "Wm.h"
 #include "WmKeys.h"
 
-/// @def WM_DOUBLE_CLICK_MS
-///
-/// @brief The longest time between two presses on a title bar that make a
-/// double-click.
-#define WM_DOUBLE_CLICK_MS 500
-
-/// @def WM_DOUBLE_CLICK_DISTANCE
-///
-/// @brief The farthest two presses on a title bar that make a double-click
-/// can be apart on either axis.
-#define WM_DOUBLE_CLICK_DISTANCE 4
-
 /// @fn static void setState(WmState *state, uint8_t id, uint8_t newState)
 ///
 /// @brief Have the Window overlay minimize, maximize or restore a window.
@@ -63,56 +51,6 @@ static void setState(WmState *state, uint8_t id, uint8_t newState) {
   state->opState = newState;
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Window", "wmWindowSetState",
     state);
-}
-
-/// @fn static uint32_t nowMs(WmState *state)
-///
-/// @brief Get the time since the window server started.  The clock is read
-/// when an input message is handled, since GfxEvent carries no time.
-///
-/// @param state The window manager's state.
-///
-/// @return Returns the milliseconds since the window server started.
-static uint32_t nowMs(WmState *state) {
-  struct timespec now;
-  timespec_get(&now, TIME_UTC);
-  return (uint32_t) (((now.tv_sec - state->started.tv_sec) * 1000L)
-    + ((now.tv_nsec - state->started.tv_nsec) / 1000000L));
-}
-
-/// @fn static bool doubleClick(WmState *state, const WmWindow *window,
-///   int16_t pointX, int16_t pointY)
-///
-/// @brief Determine whether a press on a title bar is the second of a
-/// double-click, and remember it as the first of the next one if not.
-///
-/// @param state The window manager's state.
-/// @param window The window.
-/// @param pointX The pointer's column.
-/// @param pointY The pointer's row.
-///
-/// @return Returns true if it is, false otherwise.
-static bool doubleClick(WmState *state, const WmWindow *window,
-  int16_t pointX, int16_t pointY
-) {
-  uint32_t now = nowMs(state);
-  int16_t distanceX = pointX - state->lastPressAt.x;
-  int16_t distanceY = pointY - state->lastPressAt.y;
-  if ((state->lastPressWindow == window->id)
-    && (now - state->lastPressTime <= WM_DOUBLE_CLICK_MS)
-    && (distanceX <= WM_DOUBLE_CLICK_DISTANCE)
-    && (distanceX >= -WM_DOUBLE_CLICK_DISTANCE)
-    && (distanceY <= WM_DOUBLE_CLICK_DISTANCE)
-    && (distanceY >= -WM_DOUBLE_CLICK_DISTANCE)
-  ) {
-    state->lastPressWindow = 0;
-    return true;
-  }
-  state->lastPressWindow = window->id;
-  state->lastPressTime = now;
-  state->lastPressAt.x = pointX;
-  state->lastPressAt.y = pointY;
-  return false;
 }
 
 /// @fn static bool resizable(const WmWindow *window)
@@ -237,11 +175,29 @@ static void closePopups(WmState *state, int16_t pointX, int16_t pointY) {
   }
 }
 
+/// @fn static bool controls(WmState *state, WmWindow *window,
+///   const char *function)
+///
+/// @brief Have the Controls overlay handle the state's event for a window's
+/// widgets.  Having this here keeps one copy of the job's setup.
+///
+/// @param state The window manager's state.
+/// @param window The window, or NULL.
+/// @param function The Controls overlay's function.
+///
+/// @return Returns true if a widget used the event, false otherwise.
+static bool controls(WmState *state, WmWindow *window, const char *function) {
+  WmInputJob job = { state, window, state->event, false };
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Controls", function, &job);
+  return job.handled;
+}
+
 /// @fn static void press(WmState *state, int16_t pointX, int16_t pointY)
 ///
 /// @brief Activate the window a press lands on, and press a caption button,
-/// start a resize if it's on a grab zone, or start a move if it's on the
-/// title bar.  A double-click on the title bar maximizes or restores.
+/// start a resize if it's on a grab zone, start a move if it's on the title
+/// bar, or hold a widget it's on.  A double-click on the title bar maximizes
+/// or restores.
 ///
 /// @param state The window manager's state.
 /// @param pointX The pointer's column.
@@ -249,6 +205,15 @@ static void closePopups(WmState *state, int16_t pointX, int16_t pointY) {
 ///
 /// @return This function returns no value.
 static void press(WmState *state, int16_t pointX, int16_t pointY) {
+  // A move or resize released in the same input message as this press
+  // hasn't been painted yet, and the grab this press starts replaces it.
+  WmWindow *moved = wmFind(state, state->grabbed);
+  if ((moved != NULL)
+    && (memcmp(&moved->frame, &state->shown, sizeof(GfxRect)) != 0)
+  ) {
+    wmDamage(state, &state->shown);
+    wmDamage(state, &moved->frame);
+  }
   closePopups(state, pointX, pointY);
   WmWindow *window = windowAt(state, pointX, pointY);
   if (window == NULL) {
@@ -284,7 +249,7 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
   } else if (((window->flags & WIN_FLAG_DECORATED) != 0)
     && (pointY < frame->y + WM_FRAME_TOP)
   ) {
-    if (doubleClick(state, window, pointX, pointY)) {
+    if (wmDoubleClick(state, window, pointX, pointY)) {
       setState(state, window->id,
         (window->state == WIN_STATE_MAXIMIZED) ? WIN_STATE_NORMAL
         : WIN_STATE_MAXIMIZED);
@@ -295,6 +260,9 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
     state->offset.x = pointX - frame->x;
     state->offset.y = pointY - frame->y;
   } else {
+    if (window->widgets != NULL) {
+      controls(state, window, "wmControlsPress");
+    }
     return;
   }
   state->grabbed = window->id;
@@ -571,7 +539,7 @@ static void flushSessions(WmState *state) {
 /// @return This function returns no value.
 static void key(WmState *state, const GfxEvent *event) {
   WmWindow *window = wmFind(state, state->focus);
-  if (((event->modifiers & GFX_MOD_ALT) != 0)
+  if (((event->modifiers & WM_MOD_ALT) != 0)
     && ((event->keycode == GFX_KEY_TAB) || (event->keycode == GFX_KEY_F4))
   ) {
     if (event->down == 0) {
@@ -603,6 +571,17 @@ static void key(WmState *state, const GfxEvent *event) {
     }
     return;
   }
+  if ((event->down == 0) && (event->keycode == state->widgetKey)) {
+    state->widgetKey = 0;
+    if (state->menu.swallow == event->keycode) {
+      state->menu.swallow = 0;
+    }
+    return;
+  } else if ((window->widgets != NULL)
+    && controls(state, window, "wmControlsKey")
+  ) {
+    return;
+  }
   WinEvent *sent = wmSend(state, window->owner, WIN_EVENT_KEY, window->id);
   if (sent != NULL) {
     sent->key = event->keycode;
@@ -614,8 +593,8 @@ static void key(WmState *state, const GfxEvent *event) {
 
 /// @fn void* wmInput(void *args)
 ///
-/// @brief Handle the press, release or key in the state's event, or, with
-/// no event, send each session's console what is waiting for it.
+/// @brief Handle the press, release, wheel or key in the state's event, or,
+/// with no event, send each session's console what is waiting for it.
 ///
 /// @param args A pointer to the WmState.
 ///
@@ -627,8 +606,17 @@ void* wmInput(void *args) {
     flushSessions(state);
   } else if (event->type == GFX_EVENT_KEY) {
     key(state, event);
+  } else if (state->grab >= WM_GRAB_WIDGET) {
+    controls(state, wmFind(state, state->grabbed), "wmControlsPointer");
   } else if (state->restoreOnDrag && (state->grab == WM_GRAB_MOVE)) {
     restoreUnderPointer(state, event->x);
+  } else if ((event->wheel != 0) && (state->grab == WM_GRAB_NONE)
+    && ((event->buttons & GFX_BUTTON_LEFT) == 0)
+  ) {
+    WmWindow *window = windowAt(state, event->x, event->y);
+    if ((window != NULL) && (window->widgets != NULL)) {
+      controls(state, window, "wmControlsWheel");
+    }
   } else if ((event->buttons & GFX_BUTTON_LEFT) != 0) {
     press(state, event->x, event->y);
   } else if (state->grab != WM_GRAB_NONE) {

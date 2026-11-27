@@ -28,11 +28,11 @@
 
 /// @file Start.c
 ///
-/// @brief The window server's start and end:  its options, the
-/// demonstration windows, the display, and the frame times it prints.
+/// @brief The window server's start and end:  its options, the display, and
+/// the frame times it prints.
 /// Entered once as it starts and once as it ends.
 
-#include "WmCells.h"
+#include "Wm.h"
 
 /// @def WM_LITERAL_LENGTH(literal)
 ///
@@ -50,21 +50,10 @@
 /// @brief The start of the option that picks how a window is resized.
 #define WM_OPTION_RESIZE "--resize="
 
-/// @def WM_OPTION_CONTENT
+/// @def WM_OPTION_BUDGET
 ///
-/// @brief The start of the option that picks how the cells are recorded.
-#define WM_OPTION_CONTENT "--content="
-
-/// @def WM_OPTION_CELLS
-///
-/// @brief The start of the option that sets the number of cells.
-#define WM_OPTION_CELLS "--cells="
-
-/// @def WM_DEMO_TITLE
-///
-/// @brief The title of a demo window, whose last character is replaced by
-/// the window's number.
-#define WM_DEMO_TITLE "Window 0"
+/// @brief The start of the option that sets each client's heap budget.
+#define WM_OPTION_BUDGET "--budget="
 
 /// @def WM_DISPLAY_WIDTH
 ///
@@ -80,36 +69,6 @@
 ///
 /// @brief The size of the command buffer frames are recorded in.
 #define WM_CMD_BUF_SIZE 512
-
-/// @fn static void printUsage(FILE *stream)
-///
-/// @brief Print the usage summary for sysnook, as nook, the command that
-/// runs it.
-///
-/// @param stream The stream to print to.
-///
-/// @return This function returns no value.
-static void printUsage(FILE *stream) {
-  fputs(
-    "Usage: nook [options]\n"
-    "\n"
-    "Start Nook on the display, and wait until it ends.  Ctrl+Q quits it.\n"
-    "\n"
-    "Options:\n"
-    "  --move=live|outline  How a moved window follows the pointer; outline by\n"
-    "    default.\n"
-    "  --resize=live|outline  How a resized window follows the pointer;\n"
-    "    outline by default.\n"
-    "  --content=records|call  How the full window's cells are painted;\n"
-    "    records by default.  Only with --demo.\n"
-    "  --cells=N  The number of cells in the full window, up to 192.  Only\n"
-    "    with --demo.\n"
-    "  --timing  Print how long frames and echoes took when it ends.\n"
-    "  --demo  Draw three demonstration windows of the window server's own.\n"
-    "  --finish  Wait until each frame is drawn before going on.\n"
-    "  --help  Show this help and exit.\n",
-    stream);
-}
 
 /// @fn static bool parseMode(const char *value, const char *enabled,
 ///   const char *disabled, bool *result)
@@ -135,15 +94,14 @@ static bool parseMode(const char *value, const char *enabled,
   return true;
 }
 
-/// @fn static bool parseOptions(WmState *state, int *cells)
+/// @fn static bool parseOptions(WmState *state)
 ///
 /// @brief Set the state's modes from the command line.
 ///
 /// @param state The window manager's state.
-/// @param cells Where to store the number of cells of the full window.
 ///
 /// @return Returns true if every argument is a valid option, false otherwise.
-static bool parseOptions(WmState *state, int *cells) {
+static bool parseOptions(WmState *state) {
   for (int ii = 1; ii < state->argc; ii++) {
     const char *arg = state->argv[ii];
     bool valid = true;
@@ -155,19 +113,14 @@ static bool parseOptions(WmState *state, int *cells) {
     ) {
       valid = parseMode(&arg[WM_LITERAL_LENGTH(WM_OPTION_RESIZE)], "live",
         "outline", &state->liveResize);
-    } else if (strncmp(arg, WM_OPTION_CONTENT,
-      WM_LITERAL_LENGTH(WM_OPTION_CONTENT)) == 0
+    } else if (strncmp(arg, WM_OPTION_BUDGET,
+      WM_LITERAL_LENGTH(WM_OPTION_BUDGET)) == 0
     ) {
-      valid = parseMode(&arg[WM_LITERAL_LENGTH(WM_OPTION_CONTENT)], "call",
-        "records", &state->contentByCall);
-    } else if (strncmp(arg, WM_OPTION_CELLS,
-      WM_LITERAL_LENGTH(WM_OPTION_CELLS)) == 0
-    ) {
-      *cells = (int) strtol(&arg[WM_LITERAL_LENGTH(WM_OPTION_CELLS)], NULL,
+      char *end = NULL;
+      long budget = strtol(&arg[WM_LITERAL_LENGTH(WM_OPTION_BUDGET)], &end,
         10);
-      valid = (*cells >= 0) && (*cells <= WM_MAX_CELLS);
-    } else if (strcmp(arg, "--demo") == 0) {
-      state->demo = true;
+      valid = (*end == '\0') && (budget > 0) && (budget <= UINT16_MAX);
+      state->budget = (uint16_t) budget;
     } else if (strcmp(arg, "--finish") == 0) {
       state->finishFrames = true;
     } else if (strcmp(arg, "--timing") == 0) {
@@ -185,71 +138,10 @@ static bool parseOptions(WmState *state, int *cells) {
   return true;
 }
 
-/// @fn static void layOut(WmState *state, int cells)
-///
-/// @brief Place the three demonstration windows:  two plain ones, and the
-/// full one, which is in front and active.
-///
-/// @param state The window manager's state.
-/// @param cells The number of cells of the full window.
-///
-/// @return This function returns no value.
-static void layOut(WmState *state, int cells) {
-  static const GfxRect frames[WM_DEMO_WINDOWS] = {
-    { 24, 24, 200, 150 },
-    { 260, 40, 180, 130 },
-    { 300, 200, (WM_CELL_COLUMNS * WM_CELL_SIZE) + (2 * WM_BORDER),
-      WM_FRAME_TOP + (WM_CELL_ROWS * WM_CELL_SIZE) + WM_BORDER },
-  };
-  static const GfxColor faces[WM_DEMO_WINDOWS] = {
-    CGA_LIGHT_GRAY, CGA_YELLOW, CGA_WHITE,
-  };
-  for (uint8_t ii = 0; ii < WM_DEMO_WINDOWS; ii++) {
-    WmWindow *window = &state->windows[ii];
-    window->id = state->nextId++;
-    window->layer = WIN_LAYER_NORMAL;
-    window->flags = WIN_FLAG_DECORATED | WIN_FLAG_RESIZABLE
-      | WIN_FLAG_IN_TASKBAR;
-    window->frame = frames[ii];
-    window->face = faces[ii];
-    window->title = (char*) malloc(sizeof(WM_DEMO_TITLE));
-    if (window->title != NULL) {
-      strcpy(window->title, WM_DEMO_TITLE);
-      window->title[WM_LITERAL_LENGTH(WM_DEMO_TITLE) - 1] = (char) ('0' + ii);
-    }
-  }
-  state->windows[WM_DEMO_WINDOWS - 1].cells = (uint8_t) cells;
-  state->numWindows = WM_DEMO_WINDOWS;
-  state->active = state->windows[WM_DEMO_WINDOWS - 1].id;
-  state->focus = state->active;
-}
-
-/// @fn static GfxError preloadRows(WmState *state)
-///
-/// @brief Preload each row of the full window's cells, one preload per row,
-/// because a preload has to fit one 512-byte buffer.
-///
-/// @param state The window manager's state.
-///
-/// @return Returns the status of the preloads.
-static GfxError preloadRows(WmState *state) {
-  uint8_t cells = state->windows[WM_DEMO_WINDOWS - 1].cells;
-  uint8_t rows = (cells + WM_CELL_COLUMNS - 1) / WM_CELL_COLUMNS;
-  GfxPoint origin = { 0, 0 };
-  GfxError status = GFX_OK;
-  for (uint8_t row = 0; (row < rows) && (status == GFX_OK); row++) {
-    gfxCmdBufBegin(state->cmd, GFX_CMDBUF_NO_FLUSH);
-    wmRecordRow(state->cmd, row, cells, origin, NULL);
-    status = gfxPreupload(state->cmd, &state->rows[row]);
-  }
-  gfxCmdBufBegin(state->cmd, 0);
-  return status;
-}
-
 /// @fn static void wmBegin(WmState *state)
 ///
-/// @brief Parse the options, take the display, make the command buffer, and
-/// lay out and preload the demonstration windows.  The exit status goes in
+/// @brief Parse the options, take the display, and make the command
+/// buffer.  The exit status goes in
 /// the state, and is 0 when the window server should run.  --help prints the
 /// usage, and so leaves the display alone.
 ///
@@ -259,13 +151,13 @@ static GfxError preloadRows(WmState *state) {
 static void wmBegin(WmState *state) {
   state->exitStatus = 0;
   if ((state->argc > 1) && (strcmp(state->argv[1], "--help") == 0)) {
-    printUsage(stdout);
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Usage", "wmUsage", stdout);
     state->exitStatus = WM_EXIT_HELP;
     return;
   }
-  int cells = WM_MAX_CELLS;
-  if (!parseOptions(state, &cells)) {
-    printUsage(stderr);
+  state->budget = WM_DEFAULT_BUDGET;
+  if (!parseOptions(state)) {
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Usage", "wmUsage", stderr);
     state->exitStatus = 1;
     return;
   }
@@ -291,16 +183,6 @@ static void wmBegin(WmState *state) {
       return;
     }
     gfxCmdBufBegin(state->cmd, 0);
-    if (state->demo) {
-      layOut(state, cells);
-      if (state->contentByCall) {
-        status = preloadRows(state);
-      }
-    }
-    if (status != GFX_OK) {
-      fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
-      state->exitStatus = 1;
-    }
   }
 }
 
@@ -314,7 +196,8 @@ static void wmBegin(WmState *state) {
 /// @return This function returns no value.
 static void wmFinish(WmState *state) {
   if (state->exitStatus == WM_EXIT_PAINT) {
-    fprintf(stderr, "sysnook: %s\n", gfxErrorString(state->status));
+    fprintf(stderr, "sysnook: %s\n",
+      gfxErrorString((GfxError) state->status));
     state->exitStatus = 1;
   }
   state->cmd = gfxCmdBufDestroy(state->cmd);

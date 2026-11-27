@@ -35,26 +35,6 @@
 
 #include "Wm.h"
 
-/// @fn static void wmGridCursor(WmGrid *grid)
-///
-/// @brief Swap the colours of the cell under a text grid's cursor, if it is
-/// shown, which is how the cursor is drawn:  once after a change to the grid,
-/// and again before the next, to take it away.
-///
-/// @param grid The grid.
-///
-/// @return This function returns no value.
-static void wmGridCursor(WmGrid *grid) {
-  if (grid->cursorShown && (grid->cursorRow < grid->rows)
-    && (grid->cursorColumn < grid->columns)
-  ) {
-    uint8_t *attribute = &grid->cells[(size_t) grid->rows * grid->columns
-      + (size_t) grid->cursorRow * grid->columns + grid->cursorColumn];
-    *attribute = WIN_ATTRIBUTE(WIN_ATTRIBUTE_BACKGROUND(*attribute),
-      WIN_ATTRIBUTE_FOREGROUND(*attribute));
-  }
-}
-
 /// @fn static void wmGridBlank(WmGrid *grid, uint8_t row, uint8_t left,
 ///   uint8_t count, uint8_t attribute)
 ///
@@ -289,79 +269,6 @@ static void wmGridWrite(WmState *state, ProcessMessage *message) {
   }
 }
 
-/// @fn static void wmGridFollow(WmState *state, WmWindow *window)
-///
-/// @brief Make a text grid as big as its place in the body now is, keeping
-/// its top-left cells, and tell the owner the body's and the grid's new
-/// size.  A session's console is to be sent the size, and the session a
-/// resize report if its program asked for them.
-///
-/// @param state The window manager's state.
-/// @param window The window, whose content is a WmGrid.
-///
-/// @return This function returns no value.
-static void wmGridFollow(WmState *state, WmWindow *window) {
-  WmGrid *grid = (WmGrid*) window->content;
-  grid->resized = false;
-  GfxRect place;
-  wmGridPlace(state, window, &place);
-  uint8_t columns = (uint8_t) place.w;
-  uint8_t rows = (uint8_t) place.h;
-  wmGridCursor(grid);
-  if ((columns != grid->columns) || (rows != grid->rows)) {
-    uint8_t *cells
-      = (uint8_t*) malloc((size_t) columns * rows * WM_GRID_PLANES);
-    if (cells != NULL) {
-      size_t plane = (size_t) columns * rows;
-      size_t oldPlane = (size_t) grid->columns * grid->rows;
-      memset(cells, ' ', plane);
-      memset(&cells[plane], WM_BLANK_ATTRIBUTE, plane);
-      uint8_t keepColumns = (columns < grid->columns) ? columns
-        : grid->columns;
-      for (uint8_t row = 0; (row < rows) && (row < grid->rows); row++) {
-        size_t to = (size_t) row * columns;
-        size_t from = (size_t) row * grid->columns;
-        memcpy(&cells[to], &grid->cells[from], keepColumns);
-        memcpy(&cells[plane + to], &grid->cells[oldPlane + from],
-          keepColumns);
-      }
-      free(grid->cells);
-      grid->cells = cells;
-      grid->columns = columns;
-      grid->rows = rows;
-      if (grid->cursorRow >= rows) {
-        grid->cursorRow = rows - 1;
-      }
-      if (grid->cursorColumn >= columns) {
-        grid->cursorColumn = columns - 1;
-      }
-      if (grid->port != WM_NO_PORT) {
-        grid->winsizeWanted = true;
-        grid->reportWanted = grid->reports;
-        state->inputWaiting = true;
-      }
-    }
-  }
-  wmGridMargins(state, window, grid);
-  wmGridCursor(grid);
-  grid->scroll = 0;
-  grid->noBlit = false;
-  memset(grid->dirty, 0, sizeof(grid->dirty));
-  wmGridDirty(state, grid, 0, grid->rows - 1);
-
-  WinEvent *event = wmSend(state, window->owner, WIN_EVENT_RESIZED,
-    window->id);
-  if (event != NULL) {
-    GfxRect body;
-    wmBody(window, &body);
-    event->widget = grid->widget;
-    event->x = body.w;
-    event->y = body.h;
-    event->columns = grid->columns;
-    event->rows = grid->rows;
-  }
-}
-
 /// @fn static void wmGridEnded(WmState *state, ProcessMessage *message)
 ///
 /// @brief Handle the scheduler's CONSOLE_SESSION_ENDED:  unbind the text
@@ -496,7 +403,7 @@ static void wmGridPrepare(WmState *state) {
         GfxRect damage = rows;
         damage.y += (int16_t) (first * glyphH);
         damage.h = (int16_t) ((row - first) * glyphH);
-        wmDamage(state, &damage);
+        wmDamageOwned(state, &damage, window->id);
         state->gridPainted = true;
       }
       row++;
@@ -540,7 +447,11 @@ void* wmGrid(void *args) {
       if ((window->content != NULL)
         && ((WmGrid*) window->content)->resized
       ) {
-        wmGridFollow(state, window);
+        WmTemplateJob job;
+        job.state = state;
+        job.window = window;
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Resize", "wmResizeGrid",
+          &job);
       }
     }
   }

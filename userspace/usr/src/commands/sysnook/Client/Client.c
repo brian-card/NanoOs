@@ -240,13 +240,23 @@ static void wmPost(WmState *state, WmClient *client) {
 ///
 /// @brief Hand each event the other overlays left in the outbox to its
 /// client, collect the events messages clients have finished with, and send
-/// what's waiting.
+/// what's waiting, first releasing a text field's held WIN_EVENT_CHANGED
+/// once the field has been quiet for WM_CHANGED_QUIET_MS.
 ///
 /// @param args The window manager's state.
 ///
 /// @return Always returns the provided pointer.
 void* wmClientFlush(void *args) {
   WmState *state = (WmState*) args;
+  if (state->heldWindow != 0) {
+    struct timespec now;
+    timespec_get(&now, TIME_UTC);
+    long quiet = ((now.tv_sec - state->heldSince.tv_sec) * 1000L)
+      + ((now.tv_nsec - state->heldSince.tv_nsec) / 1000000L);
+    if (quiet >= WM_CHANGED_QUIET_MS) {
+      wmReleaseChanged(state);
+    }
+  }
   for (uint8_t ii = 0; ii < state->numOutbox; ii++) {
     WmClient *client = wmClientFind(state, state->outbox[ii].pid);
     if (client != NULL) {
@@ -261,6 +271,7 @@ void* wmClientFlush(void *args) {
     wmPost(state, client);
     state->eventsWaiting |= (client->numPending > 0);
   }
+  state->eventsWaiting |= (state->heldWindow != 0);
   return args;
 }
 

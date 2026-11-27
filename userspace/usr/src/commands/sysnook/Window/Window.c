@@ -174,23 +174,31 @@ static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
   }
 }
 
-/// @fn static void wmFreeGrid(WmGrid *grid)
+/// @fn static uint8_t wmTemplate(WmState *state, WmWindow *window,
+///   const char *function, const uint8_t *widgets, uint16_t size)
 ///
-/// @brief Close a text grid's session, if it has one, and free the grid.
+/// @brief Have the Template overlay add a template to a window, or free the
+/// window's grid and widgets.  Having this here keeps one copy of the job's
+/// setup.
 ///
-/// @param grid The grid, or NULL.
+/// @param state The window manager's state.
+/// @param window The window.
+/// @param function "wmTemplateAdd" or "wmTemplateFree".
+/// @param widgets The template, for wmTemplateAdd.
+/// @param size The bytes at widgets.
 ///
-/// @return This function returns no value.
-static void wmFreeGrid(WmGrid *grid) {
-  if (grid == NULL) {
-    return;
-  }
-  if (grid->port != WM_NO_PORT) {
-    windowServerCloseSession(grid->port);
-  }
-  wmGridUnbind(grid);
-  free(grid->cells);
-  free(grid);
+/// @return Returns the WinError the Template overlay sets.
+static uint8_t wmTemplate(WmState *state, WmWindow *window,
+  const char *function, const uint8_t *widgets, uint16_t size
+) {
+  WmTemplateJob job;
+  job.state = state;
+  job.window = window;
+  job.widgets = widgets;
+  job.size = size;
+  job.status = WIN_OK;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Template", function, &job);
+  return job.status;
 }
 
 /// @fn static void wmRemoveWindow(WmState *state, WmWindow *window)
@@ -219,7 +227,7 @@ static void wmRemoveWindow(WmState *state, WmWindow *window) {
     memset(&state->outline, 0, sizeof(state->outline));
   }
   free(window->title);
-  wmFreeGrid((WmGrid*) window->content);
+  wmTemplate(state, window, "wmTemplateFree", NULL, 0);
   uint8_t index = (uint8_t) (window - state->windows);
   state->numWindows--;
   memmove(window, window + 1,
@@ -312,106 +320,6 @@ static void wmLimit(WmState *state, WmWindow *window) {
   }
 }
 
-/// @fn static uint8_t wmOpenSession(WmGrid *grid, ProcessId display)
-///
-/// @brief Open the session a text grid is bound to, as big as the grid,
-/// whose output goes to the grid's owner.
-///
-/// @param grid The grid.
-/// @param display The ProcessId of the window's owner.
-///
-/// @return Returns WIN_OK, or the WinError for why the session couldn't be
-/// opened.
-static uint8_t wmOpenSession(WmGrid *grid, ProcessId display) {
-  grid->inputArgs = MESSAGE_ARGS_CREATE(ConsoleInputReadyArgs,
-    MESSAGE_ARGS_ROUND_TRIP);
-  grid->winsizeArgs = MESSAGE_ARGS_CREATE(ConsoleWinsizeArgs,
-    MESSAGE_ARGS_ROUND_TRIP);
-  if ((grid->inputArgs == NULL) || (grid->winsizeArgs == NULL)) {
-    return WIN_ERR_NO_MEMORY;
-  }
-  uint8_t port = WM_NO_PORT;
-  uint8_t shell = 0;
-  if (windowServerOpenSession(grid->rows, grid->columns, display, &port,
-      &shell) != 0
-  ) {
-    if (errno == EPERM) {
-      return WIN_ERR_PERMISSION;
-    } else if (errno == EINVAL) {
-      return WIN_ERR_INVALID;
-    }
-    return WIN_ERR_NO_MEMORY;
-  }
-  grid->port = port;
-  grid->shell = shell;
-  return WIN_OK;
-}
-
-/// @fn static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
-///   const uint8_t *widgets, uint16_t size)
-///
-/// @brief Make a window's content from its template, which may be one text
-/// grid record and nothing else, and open the grid's session if its record
-/// asks for one.
-///
-/// @param state The window manager's state.
-/// @param window The window, whose frame is set.
-/// @param widgets The template.
-/// @param size The number of bytes in the template.
-///
-/// @return Returns WIN_OK, or the WinError for why the content couldn't be
-/// made, in which case the window has none.
-static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
-  const uint8_t *widgets, uint16_t size
-) {
-  if ((widgets == NULL) || (size != WIN_RECORD_HEADER_SIZE)
-    || (widgets[WIN_RECORD_KIND] != WIN_WIDGET_TEXT_GRID)
-  ) {
-    return WIN_ERR_NOT_SUPPORTED;
-  }
-  WmGrid *grid = (WmGrid*) calloc(1, sizeof(WmGrid));
-  if (grid == NULL) {
-    return WIN_ERR_NO_MEMORY;
-  }
-  window->content = grid;
-  window->face = WM_GRID_FACE;
-  grid->widget = widgets[WIN_RECORD_ID];
-  grid->flags = widgets[WIN_RECORD_FLAGS];
-  grid->anchor = widgets[WIN_RECORD_ANCHOR];
-  grid->port = WM_NO_PORT;
-  memcpy(&grid->rect, &widgets[WIN_RECORD_RECT], sizeof(grid->rect));
-  GfxRect body;
-  wmBody(window, &body);
-  grid->left = body.x - window->frame.x + grid->rect.x;
-  grid->top = body.y - window->frame.y + grid->rect.y;
-  grid->marginRight = body.w - grid->rect.x - grid->rect.w;
-  grid->marginBottom = body.h - grid->rect.y - grid->rect.h;
-  GfxRect place;
-  wmGridPlace(state, window, &place);
-  grid->columns = (uint8_t) place.w;
-  grid->rows = (uint8_t) place.h;
-  wmGridMargins(state, window, grid);
-  size_t plane = (size_t) grid->columns * grid->rows;
-  grid->cells = (uint8_t*) malloc(plane * WM_GRID_PLANES);
-  uint8_t status = WIN_ERR_NO_MEMORY;
-  if (grid->cells != NULL) {
-    memset(grid->cells, ' ', plane);
-    memset(&grid->cells[plane], WM_BLANK_ATTRIBUTE, plane);
-    grid->cells[plane]
-      = WIN_ATTRIBUTE(WIN_ANSI_BLACK, WIN_ANSI_BRIGHT_WHITE);
-    grid->cursorShown = true;
-    status = WIN_OK;
-    if ((grid->flags & WIN_WIDGET_SESSION) != 0) {
-      status = wmOpenSession(grid, window->owner);
-    }
-  }
-  if (status != WIN_OK) {
-    wmFreeGrid(grid);
-    window->content = NULL;
-  }
-  return status;
-}
-
 /// @fn static void wmCreateWindow(WmState *state, ProcessId pid,
 ///   WinCreateWindowArgs *args)
 ///
@@ -450,15 +358,15 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   window.frame = args->frame;
   wmLimit(state, &window);
   if (args->templateSize != 0) {
-    args->status = wmMakeGrid(state, &window, args->widgets,
-      args->templateSize);
+    args->status = wmTemplate(state, &window, "wmTemplateAdd",
+      args->widgets, args->templateSize);
     if (args->status != WIN_OK) {
       return;
     }
   }
   window.title = wmCopyTitle(args->title, args->titleLength);
   if ((args->titleLength != 0) && (window.title == NULL)) {
-    wmFreeGrid((WmGrid*) window.content);
+    wmTemplate(state, &window, "wmTemplateFree", NULL, 0);
     args->status = WIN_ERR_NO_MEMORY;
     return;
   }
@@ -514,7 +422,7 @@ static WmWindow* wmOwnWindow(WmState *state, ProcessId pid, uint8_t id,
 /// @fn static void wmSetWindow(WmState *state, ProcessId pid,
 ///   WinSetWindowArgs *args)
 ///
-/// @brief Change a client's window's title, frame or state.
+/// @brief Change a client's window's title, face, frame or state.
 ///
 /// @param state The window manager's state.
 /// @param pid The client's ProcessId.
@@ -545,6 +453,10 @@ static void wmSetWindow(WmState *state, ProcessId pid,
     GfxRect bar = { window->frame.x, window->frame.y, window->frame.w,
       WM_FRAME_TOP };
     wmDamage(state, &bar);
+  }
+  if ((args->changes & WIN_SET_FACE) != 0) {
+    window->face = args->face;
+    wmDamage(state, &window->frame);
   }
   if ((args->changes & WIN_SET_FRAME) != 0) {
     wmDamage(state, &window->frame);
@@ -622,6 +534,15 @@ static void wmRequest(WmState *state, ProcessId pid, uint8_t type,
     if (window != NULL) {
       wmRemoveWindow(state, window);
     }
+  } else if ((type >= WIN_MSG_ADD_WIDGETS) && (type <= WIN_MSG_SET_CANVAS)) {
+    WmTemplateJob job;
+    job.state = state;
+    job.data = data;
+    job.pid = pid;
+    job.type = type;
+    job.waiting = waiting;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Template",
+      "wmTemplateRequest", &job);
   } else if (waiting) {
     *((uint8_t*) data) = WIN_ERR_NOT_SUPPORTED;
   }

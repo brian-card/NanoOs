@@ -3,7 +3,7 @@
 /// @file              WmTheme.h
 ///
 /// @brief             Nook's look:  the sizes, in pixels with the 6x8 font,
-///                    and the colours of everything the window server draws.
+///                    and the colors of everything the window server draws.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -119,50 +119,50 @@
 
 /// @def WM_DESKTOP
 ///
-/// @brief The colour of the desktop.
+/// @brief The color of the desktop.
 #define WM_DESKTOP 0x00AAAAFF
 
 /// @def WM_FACE
 ///
-/// @brief The colour of a window's face.
+/// @brief The color of a window's face.
 #define WM_FACE 0xFFFFFFFF
 
 /// @def WM_LIGHT
 ///
-/// @brief The colour of an inactive title bar, and of a caption button's
+/// @brief The color of an inactive title bar, and of a caption button's
 /// face under the pointer.
 #define WM_LIGHT 0xAAAAAAFF
 
 /// @def WM_DARK
 ///
-/// @brief The colour of an inactive border and of inactive text, and of a
+/// @brief The color of an inactive border and of inactive text, and of a
 /// pressed caption button's face.
 #define WM_DARK 0x555555FF
 
 /// @def WM_TEXT
 ///
-/// @brief The colour of text.
+/// @brief The color of text.
 #define WM_TEXT 0x000000FF
 
 /// @def WM_ACCENT
 ///
-/// @brief The colour of an active title bar and border.
+/// @brief The color of an active title bar and border.
 #define WM_ACCENT 0x0000AAFF
 
 /// @def WM_ON_ACCENT
 ///
-/// @brief The colour of text on the accent colour.
+/// @brief The color of text on the accent color.
 #define WM_ON_ACCENT 0xFFFFFFFF
 
 /// @def WM_CLOSE_HOT
 ///
-/// @brief The colour of the close button's face under the pointer.
+/// @brief The color of the close button's face under the pointer.
 #define WM_CLOSE_HOT 0xFF5555FF
 
 /// @def WM_ANSI_COLORS
 ///
-/// @brief The 16 ANSI colours a text grid's attributes index, black to
-/// bright white:  the CGA colours ansiToCgaMap gives each, so that a terminal
+/// @brief The 16 ANSI colors a text grid's attributes index, black to
+/// bright white:  the CGA colors ansiToCgaMap gives each, so that a terminal
 /// looks as the VDP console does.
 #define WM_ANSI_COLORS { \
   CGA_BLACK, CGA_RED, CGA_GREEN, CGA_BROWN, \
@@ -173,7 +173,7 @@
 
 /// @def WM_GRID_FACE
 ///
-/// @brief The colour of the body of a window with a text grid:  ANSI black,
+/// @brief The color of the body of a window with a text grid:  ANSI black,
 /// a grid's default background.
 #define WM_GRID_FACE CGA_BLACK
 

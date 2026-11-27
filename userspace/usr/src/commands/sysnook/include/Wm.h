@@ -50,15 +50,16 @@
 /// @brief The most windows the window server keeps at once.
 #define WM_MAX_WINDOWS 16
 
-/// @def WM_DEMO_WINDOWS
-///
-/// @brief The number of demonstration windows --demo draws.
-#define WM_DEMO_WINDOWS 3
-
 /// @def WM_MAX_CLIENTS
 ///
 /// @brief The most processes connected to the window server at once.
 #define WM_MAX_CLIENTS 16
+
+/// @def WM_DEFAULT_BUDGET
+///
+/// @brief The bytes of the window server's heap each client's windows,
+/// widgets and grids may take, unless --budget says otherwise.
+#define WM_DEFAULT_BUDGET 16384
 
 /// @def WM_MAX_PENDING
 ///
@@ -84,26 +85,6 @@
 /// @brief How long the window server waits for a message while a client has
 /// events it hasn't been able to send.
 #define WM_POLL_MS 50
-
-/// @def WM_CELL_SIZE
-///
-/// @brief The width and height of a cell of the full window.
-#define WM_CELL_SIZE 20
-
-/// @def WM_CELL_COLUMNS
-///
-/// @brief The number of cells in each row of the full window.
-#define WM_CELL_COLUMNS 16
-
-/// @def WM_CELL_ROWS
-///
-/// @brief The most rows of cells the full window holds.
-#define WM_CELL_ROWS 12
-
-/// @def WM_MAX_CELLS
-///
-/// @brief The most cells the full window holds, which fill its body.
-#define WM_MAX_CELLS (WM_CELL_COLUMNS * WM_CELL_ROWS)
 
 /// @def WM_MAX_DAMAGE
 ///
@@ -197,6 +178,18 @@
 /// keeps an overlay that calls none of them warning-free.
 #define WM_SHARED static __attribute__((noinline, unused))
 
+/// @def WM_CHANGED_QUIET_MS
+///
+/// @brief How long a text field has to go unchanged before its owner is sent
+/// WIN_EVENT_CHANGED, unless something it does first sends it sooner.
+#define WM_CHANGED_QUIET_MS 250
+
+/// @def WM_MOD_ALT
+///
+/// @brief The modifier bits of either Alt:  the VDP reports the right one as
+/// AltGr.
+#define WM_MOD_ALT (GFX_MOD_ALT | GFX_MOD_ALT_GR)
+
 /// @enum WmGrab
 ///
 /// @brief What the press that is held down started.
@@ -205,12 +198,44 @@
 /// @param WM_GRAB_MOVE Moving a window by its title bar.
 /// @param WM_GRAB_RESIZE Resizing a window by its edges.
 /// @param WM_GRAB_BUTTON Pressing a caption button, which acts on release.
+/// @param WM_GRAB_WIDGET Pressing a widget, which acts on release.
+/// @param WM_GRAB_MENU A menu is open, whether or not a button is held.  It
+///   comes after WM_GRAB_WIDGET, since both take every pointer event.
 typedef enum WmGrab {
   WM_GRAB_NONE = 0,
   WM_GRAB_MOVE,
   WM_GRAB_RESIZE,
   WM_GRAB_BUTTON,
+  WM_GRAB_WIDGET,
+  WM_GRAB_MENU,
 } WmGrab;
+
+/// @struct WmMenuState
+///
+/// @brief The menu that is open, if one is, and how Alt has been used.
+///
+/// @param open Whether a menu is open.
+/// @param window The identifier of the open menu's window.
+/// @param bar The index of its menu bar among the window's widgets.
+/// @param menu The open menu's index in the bar.
+/// @param item The index of the highlighted item, or WM_NO_WIDGET.
+/// @param down Whether the left button was down at the last pointer event.
+/// @param altAlone Whether an Alt is down and nothing else has been pressed
+///   since.
+/// @param swallow The key that closed the menu, whose release is the menu's
+///   too, or 0.
+/// @param rect Where the open menu's dropdown is on the screen.
+typedef struct WmMenuState {
+  bool    open;
+  uint8_t window;
+  uint8_t bar;
+  uint8_t menu;
+  uint8_t item;
+  bool    down;
+  bool    altAlone;
+  uint8_t swallow;
+  GfxRect rect;
+} WmMenuState;
 
 /// @enum WmButton
 ///
@@ -279,34 +304,124 @@ typedef enum WmStartOperation {
 /// @param flags The WIN_FLAG_* bits.
 /// @param state The WinState.
 /// @param restoreState The WinState a minimized window goes back to.
-/// @param cells The number of cells of a demonstration window's body.
 /// @param owner The ProcessId of the client that owns it, or 0 for the
 ///   window server's own.
-/// @param face The colour of the body.
+/// @param face The color of the body.
 /// @param frame Where the window is, in screen coordinates, including its
 ///   decorations.
 /// @param restored The frame a maximized window goes back to.
 /// @param title The title, on the heap, or NULL.
 /// @param content The window's WmGrid, or NULL.
+/// @param widgets The window's WmWidgets, or NULL.
 typedef struct WmWindow {
   uint8_t   id;
   uint8_t   layer;
   uint8_t   flags;
   uint8_t   state;
   uint8_t   restoreState;
-  uint8_t   cells;
   ProcessId owner;
   GfxColor  face;
   GfxRect   frame;
   GfxRect   restored;
   char     *title;
   void     *content;
+  void     *widgets;
 } WmWindow;
+
+/// @struct WmWidget
+///
+/// @brief One widget of a window's template, as the window server keeps it.
+/// The bytes come first, because ez80-clang can't address a multi-byte field
+/// at an offset of 126 or 127.
+///
+/// @param kind The WinWidgetKind.
+/// @param id The application's identifier for it, unique in the window, or
+///   0 for none.
+/// @param flags The WIN_WIDGET_* bits.
+/// @param anchor The WIN_ANCHOR_* bits.
+/// @param align A label's WIN_ALIGN_* value.
+/// @param group A radio button's group.
+/// @param maxLength A text field's most bytes, which its text's storage
+///   holds.
+/// @param caret The byte of a text field's text the caret is before.
+/// @param scroll The first byte of a text field's text that is shown.
+/// @param textLength The bytes at text.
+/// @param value A box's or toggle button's state, or a list's selection,
+///   WIN_NO_ITEM for none.
+/// @param top The first item a list shows.
+/// @param itemsSize The bytes of a list's items, a menu bar's menus or a
+///   canvas's WmCanvas at text.
+/// @param numItems The number of a list's items or a menu bar's menus.
+/// @param rect Its place in the body when the template was given, which
+///   wmWidgetRect moves and stretches by its anchors.
+/// @param marginRight How far its right edge was from the body's then.
+/// @param marginBottom How far its bottom edge was from the body's then.
+/// @param text Its text, with no terminator, a list's NUL-separated items,
+///   a menu bar's menus, or a canvas's WmCanvas, on the heap, or NULL.
+typedef struct WmWidget {
+  uint8_t  kind;
+  uint8_t  id;
+  uint8_t  flags;
+  uint8_t  anchor;
+  uint8_t  align;
+  uint8_t  group;
+  uint8_t  maxLength;
+  uint8_t  caret;
+  uint8_t  scroll;
+  uint8_t  textLength;
+  uint16_t value;
+  uint16_t top;
+  uint16_t itemsSize;
+  uint16_t numItems;
+  GfxRect  rect;
+  int16_t  marginRight;
+  int16_t  marginBottom;
+  char    *text;
+} WmWidget;
+
+/// @struct WmWidgets
+///
+/// @brief A window's widgets, in template order.
+///
+/// @param count The number of widgets.
+/// @param focus The index of the widget with the keyboard focus, or
+///   WM_NO_WIDGET.
+/// @param pressed The index of the widget held down, or WM_NO_WIDGET.
+/// @param pressInside Whether the pointer is still on the widget held down.
+/// @param bytes The bytes they take on the heap, this structure and their
+///   texts included, which are charged to the window's owner.
+/// @param widget The widgets, as many as count:  the block is allocated with
+///   room for all of them past the one sizeof(WmWidgets) holds, since C++
+///   has no flexible array members.
+typedef struct WmWidgets {
+  uint8_t  count;
+  uint8_t  focus;
+  uint8_t  pressed;
+  bool     pressInside;
+  uint16_t bytes;
+  WmWidget widget[1];
+} WmWidgets;
+
+/// @def WM_NO_WIDGET
+///
+/// @brief The index that names none of a window's widgets.
+#define WM_NO_WIDGET 0xFF
+
+/// @def WM_LIST_ITEM_HEIGHT
+///
+/// @brief The height of a list's row.
+#define WM_LIST_ITEM_HEIGHT 10
+
+/// @def WM_SCROLL_BAR_WIDTH
+///
+/// @brief The width of a list's scroll bar, and the height of each of its
+/// arrows.
+#define WM_SCROLL_BAR_WIDTH 10
 
 /// @struct WmGrid
 ///
 /// @brief A text grid:  rows and columns of cells, each a character byte and
-/// an attribute byte, the foreground ANSI colour in its low 4 bits and the
+/// an attribute byte, the foreground ANSI color in its low 4 bits and the
 /// background in its high 4.
 ///
 /// @param widget The widget's identifier.
@@ -338,8 +453,8 @@ typedef struct WmWindow {
 /// @param marginRight How far the grid's right edge is from the body's.
 /// @param marginBottom How far the grid's bottom edge is from the body's.
 /// @param margins The parts of the body the cells leave uncovered, relative
-///   to the window's frame, which are painted the body's colour instead of
-///   the whole body, so that no cell shows it between its old colours and
+///   to the window's frame, which are painted the body's color instead of
+///   the whole body, so that no cell shows it between its old colors and
 ///   its new.
 /// @param dirty A bit per row to repaint.
 /// @param held Keys typed that the session hasn't been sent.
@@ -394,6 +509,7 @@ typedef struct WmGrid {
 /// @param numPending The number of entries in pending.
 /// @param leaving Whether the process said goodbye, so that it gets no more
 ///   events.
+/// @param used The bytes of the heap its windows' widgets and grids take.
 /// @param message The WIN_MSG_EVENTS the process hasn't marked done, or NULL.
 /// @param args The events message's arguments, a persistent round trip that
 ///   lives as long as the client.
@@ -403,6 +519,7 @@ typedef struct WmClient {
   ProcessId       pid;
   uint8_t         numPending;
   bool            leaving;
+  uint16_t        used;
   ProcessMessage *message;
   WinEventsArgs  *args;
   WinEvent        pending[WM_MAX_PENDING];
@@ -465,9 +582,6 @@ typedef struct WmTimes {
 ///   an outline.
 /// @param liveResize Whether a resized window follows the pointer, rather
 ///   than an outline.
-/// @param contentByCall Whether the full window's cells are painted by
-///   calling preloads rather than by sending their records.
-/// @param demo Whether --demo asked for the demonstration windows.
 /// @param finishFrames Whether --finish asked for each frame to be drawn
 ///   before the next message is handled.
 /// @param displayOpen Whether the display was opened.
@@ -519,7 +633,6 @@ typedef struct WmTimes {
 /// @param display The display.
 /// @param started When the window server started.
 /// @param damage The rectangles the next frame repaints.
-/// @param rows The preloaded rows of cells, or GFX_INVALID_HANDLE.
 /// @param message The window protocol message the Client overlay handles.
 /// @param clients The connected processes.
 /// @param outbox The events the Client overlay sends next.
@@ -537,8 +650,28 @@ typedef struct WmTimes {
 ///   waited, which main handles next, or NULL.
 /// @param echoKey Whether --timing waits for the frame that echoes the key
 ///   sent at keySent.
-/// @param gridPainted Whether the next frame repaints text grid rows.
+/// @param gridPainted Whether the next frame repaints text grid rows, or a
+///   text field a key changed.
 /// @param keySent When the key echoKey waits on was sent.
+/// @param budget The bytes of the heap each client may take.
+/// @param menu The open menu.
+/// @param ending Whether the window server has stopped and is giving its
+///   clients' windows up, when the driver discards their preuploads with
+///   the display.
+/// @param refocus The windows that stopped and started being active since
+///   the last frame, or 0, whose focused widgets the Restack overlay
+///   repaints.
+/// @param raised The window raised since the last frame, or 0.
+/// @param raisedFrom The index the raised window was raised from.
+/// @param widgetKey The key a widget took the press of, whose release the
+///   Input overlay drops without asking the Controls overlay, or 0.
+/// @param damageOwner The identifier of the window whose own contents
+///   changed under each rectangle of damage, which the Paint overlay repaints
+///   only where that window shows, or 0 to repaint everything there.
+/// @param heldWindow The window of the text field whose WIN_EVENT_CHANGED is
+///   held until the field has been quiet for WM_CHANGED_QUIET_MS, or 0.
+/// @param heldWidget That text field's identifier.
+/// @param heldSince When that text field last changed.
 typedef struct WmState {
   uint8_t         numWindows;
   uint8_t         grab;
@@ -550,8 +683,6 @@ typedef struct WmState {
   bool            paintAll;
   bool            liveMove;
   bool            liveResize;
-  bool            contentByCall;
-  bool            demo;
   bool            finishFrames;
   bool            displayOpen;
   bool            revoked;
@@ -590,11 +721,10 @@ typedef struct WmState {
   GfxRect         shown;
   GfxRect         grabStart;
   GfxRect         workArea;
-  uint8_t         pad;
+  uint8_t         pad[3];
   GfxDisplay      display;
   struct timespec started;
   GfxRect         damage[WM_MAX_DAMAGE];
-  GfxHandle       rows[WM_CELL_ROWS];
   ProcessMessage *message;
   WmClient       *clients[WM_MAX_CLIENTS];
   WmOutgoing      outbox[WM_OUTBOX];
@@ -608,7 +738,190 @@ typedef struct WmState {
   bool            echoKey;
   bool            gridPainted;
   struct timespec keySent;
+  uint16_t        budget;
+  WmMenuState     menu;
+  bool            ending;
+  uint8_t         refocus[2];
+  uint8_t         raised;
+  uint8_t         raisedFrom;
+  uint8_t         widgetKey;
+  uint8_t         damageOwner[WM_MAX_DAMAGE];
+  uint8_t         heldWindow;
+  uint8_t         heldWidget;
+  struct timespec heldSince;
 } WmState;
+
+/// @struct WmPaintJob
+///
+/// @brief What the Paint overlay hands the Widgets overlay to paint a
+/// window's widgets.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+/// @param clip The rectangle being painted.
+typedef struct WmPaintJob {
+  WmState        *state;
+  const WmWindow *window;
+  const GfxRect  *clip;
+} WmPaintJob;
+
+/// @struct WmInputJob
+///
+/// @brief What the Input overlay hands the Controls overlay:  a press, a
+/// pointer event while a widget is held, or a key, in a window with widgets.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+/// @param event The event.
+/// @param handled Whether the Controls overlay used the event, which it
+///   sets.
+typedef struct WmInputJob {
+  WmState        *state;
+  WmWindow       *window;
+  const GfxEvent *event;
+  bool            handled;
+} WmInputJob;
+
+/// @def WM_CANVAS_PRELOADS
+///
+/// @brief The most preuploads one canvas's records are split into.
+#define WM_CANVAS_PRELOADS 8
+
+/// @def WM_CANVAS_CHUNK
+///
+/// @brief The most bytes of records one of a canvas's preuploads holds,
+/// which is the command buffer's size.
+#define WM_CANVAS_CHUNK 512
+
+/// @struct WmCanvas
+///
+/// @brief A canvas's records, as the driver's preuploads of them.
+///
+/// @param count The number of preuploads.
+/// @param preloads Their handles, in order.
+typedef struct WmCanvas {
+  uint8_t   count;
+  GfxHandle preloads[WM_CANVAS_PRELOADS];
+} WmCanvas;
+
+/// @struct WmCanvasJob
+///
+/// @brief What the Template and Property overlays hand the Canvas overlay to
+/// discard the preuploads of the canvases among some of a window's widgets.
+///
+/// @param state The window manager's state.
+/// @param widgets The window's widgets.
+/// @param from The index of the first widget.
+/// @param to The index after the last.
+typedef struct WmCanvasJob {
+  WmState   *state;
+  WmWidgets *widgets;
+  uint8_t    from;
+  uint8_t    to;
+} WmCanvasJob;
+
+/// @struct WmMenusCheck
+///
+/// @brief What the Template overlay hands the Property overlay to check a
+/// menu bar's menus.
+///
+/// @param menus The menus.
+/// @param size The bytes at menus.
+/// @param count The number of menus, or -1 if they are malformed, which the
+///   Property overlay sets.
+typedef struct WmMenusCheck {
+  const uint8_t *menus;
+  uint16_t       size;
+  int16_t        count;
+} WmMenusCheck;
+
+/// @struct WmWidgetJob
+///
+/// @brief What one overlay hands the Lists or Menus overlay:  a list or
+/// menu bar to paint, or an event for one.
+///
+/// @param state The window manager's state.
+/// @param window The widget's window, or NULL if it has gone.
+/// @param widget The widget, or NULL if it has gone.
+/// @param rect Where the widget is.
+/// @param event The event, or NULL to paint.
+/// @param focused Whether the widget shows the focus, to paint.
+/// @param handled Whether the widget used the event, which the overlay
+///   sets.
+typedef struct WmWidgetJob {
+  WmState        *state;
+  WmWindow       *window;
+  WmWidget       *widget;
+  GfxRect         rect;
+  const GfxEvent *event;
+  bool            focused;
+  bool            handled;
+} WmWidgetJob;
+
+/// @struct WmTemplateJob
+///
+/// @brief What the Window overlay hands the Template overlay:  a template to
+/// add to a window, a window whose widgets to free, or a widget request.
+///
+/// @param state The window manager's state.
+/// @param window The window, or NULL for a request.
+/// @param widgets The template.
+/// @param data A request's arguments.
+/// @param size The bytes at widgets.
+/// @param pid The ProcessId of the request's sender.
+/// @param type A request's WinMsgType.
+/// @param waiting Whether the request's sender waits for an answer.
+/// @param status The WinError the Template overlay sets.
+typedef struct WmTemplateJob {
+  WmState       *state;
+  WmWindow      *window;
+  const uint8_t *widgets;
+  void          *data;
+  uint16_t       size;
+  ProcessId      pid;
+  uint8_t        type;
+  bool           waiting;
+  uint8_t        status;
+} WmTemplateJob;
+
+/// @fn static bool wmIntersect(const GfxRect *first, const GfxRect *second,
+///   GfxRect *result)
+///
+/// @brief Find where two rectangles overlap.
+///
+/// @param first One rectangle.
+/// @param second The other.
+/// @param result Where to store the overlap, which may be either input.
+///
+/// @return Returns true if they overlap, false otherwise.
+WM_SHARED bool wmIntersect(const GfxRect *first, const GfxRect *second,
+  GfxRect *result
+) {
+  int16_t left = first->x;
+  int16_t top = first->y;
+  int16_t right = first->x + first->w;
+  int16_t bottom = first->y + first->h;
+  if (second->x > left) {
+    left = second->x;
+  }
+  if (second->y > top) {
+    top = second->y;
+  }
+  if (second->x + second->w < right) {
+    right = second->x + second->w;
+  }
+  if (second->y + second->h < bottom) {
+    bottom = second->y + second->h;
+  }
+  if ((left >= right) || (top >= bottom)) {
+    return false;
+  }
+  result->x = left;
+  result->y = top;
+  result->w = right - left;
+  result->h = bottom - top;
+  return true;
+}
 
 /// @fn static WmWindow* wmFind(WmState *state, uint8_t id)
 ///
@@ -656,9 +969,31 @@ WM_SHARED bool wmContains(const GfxRect *rect, int16_t pointX,
 /// @return This function returns no value.
 WM_SHARED void wmDamage(WmState *state, const GfxRect *rect) {
   if (state->numDamage < WM_MAX_DAMAGE) {
+    state->damageOwner[state->numDamage] = 0;
     state->damage[state->numDamage++] = *rect;
   } else {
     state->paintAll = true;
+  }
+}
+
+/// @fn static void wmDamageOwned(WmState *state, const GfxRect *rect,
+///   uint8_t owner)
+///
+/// @brief Mark a rectangle where a window's own contents changed to be
+/// repainted next frame, only where the window shows.
+///
+/// @param state The window manager's state.
+/// @param rect The rectangle, in screen coordinates.
+/// @param owner The window's identifier.
+///
+/// @return This function returns no value.
+WM_SHARED void wmDamageOwned(WmState *state, const GfxRect *rect,
+  uint8_t owner
+) {
+  uint8_t index = state->numDamage;
+  wmDamage(state, rect);
+  if (index < state->numDamage) {
+    state->damageOwner[index] = owner;
   }
 }
 
@@ -690,9 +1025,229 @@ WM_SHARED WinEvent* wmSend(WmState *state, ProcessId pid, uint8_t type,
   return &outgoing->event;
 }
 
+/// @fn static void wmChanged(WmState *state, const WmWindow *window,
+///   const WmWidget *widget, uint16_t value)
+///
+/// @brief Tell a text field's or list's owner it changed, with a text's
+/// length or a list's selection, once for each message of input:  a
+/// WIN_EVENT_CHANGED for the widget already waiting to go out is brought up
+/// to date instead of sending another.
+///
+/// @param state The window manager's state.
+/// @param window The field's window.
+/// @param widget The text field or list.
+/// @param value The event's value.
+///
+/// @return This function returns no value.
+WM_SHARED void wmChanged(WmState *state, const WmWindow *window,
+  const WmWidget *widget, uint16_t value
+) {
+  WinEvent *event = NULL;
+  for (uint8_t ii = 0; ii < state->numOutbox; ii++) {
+    WmOutgoing *outgoing = &state->outbox[ii];
+    if ((outgoing->pid == window->owner)
+      && (outgoing->event.type == WIN_EVENT_CHANGED)
+      && (outgoing->event.window == window->id)
+      && (outgoing->event.widget == widget->id)
+    ) {
+      event = &outgoing->event;
+    }
+  }
+  if (event == NULL) {
+    event = wmSend(state, window->owner, WIN_EVENT_CHANGED, window->id);
+  }
+  if (event != NULL) {
+    event->widget = widget->id;
+    event->value = value;
+  }
+}
+
+/// @fn static uint16_t wmCountItems(const char *items, uint16_t size)
+///
+/// @brief Count a list's items:  each ended by a NUL, which the last may
+/// lack.
+///
+/// @param items The items.
+/// @param size The bytes at items.
+///
+/// @return Returns the number of items.
+WM_SHARED uint16_t wmCountItems(const char *items, uint16_t size) {
+  uint16_t count = 0;
+  for (uint16_t ii = 0; ii < size; ii++) {
+    if (items[ii] == '\0') {
+      count++;
+    }
+  }
+  if ((size > 0) && (items[size - 1] != '\0')) {
+    count++;
+  }
+  return count;
+}
+
+/// @fn static const char* wmItem(const WmWidget *list, uint16_t index,
+///   uint16_t *length)
+///
+/// @brief Find one of a list's items.
+///
+/// @param list The list.
+/// @param index The item's index, which must be under its number of items.
+/// @param length Where to store the bytes of its text.
+///
+/// @return Returns a pointer to its text, which has no terminator.
+WM_SHARED const char* wmItem(const WmWidget *list, uint16_t index,
+  uint16_t *length
+) {
+  const char *at = list->text;
+  const char *end = list->text + list->itemsSize;
+  for (; index > 0; index--) {
+    while (*at != '\0') {
+      at++;
+    }
+    at++;
+  }
+  const char *stop = at;
+  while ((stop < end) && (*stop != '\0')) {
+    stop++;
+  }
+  *length = (uint16_t) (stop - at);
+  return at;
+}
+
+/// @fn static const uint8_t* wmSkipText(const uint8_t *text)
+///
+/// @brief Step past a length byte and its text.
+///
+/// @param text The length byte.
+///
+/// @return Returns a pointer to the byte after the text.
+WM_SHARED const uint8_t* wmSkipText(const uint8_t *text) {
+  return text + 1 + *text;
+}
+
+/// @fn static uint8_t* wmMenuItem(uint8_t *menu, uint8_t index)
+///
+/// @brief Find one of a menu's items.
+///
+/// @param menu The menu's title length byte.
+/// @param index The item's index, which must be under its count.
+///
+/// @return Returns a pointer to the item's identifier.
+WM_SHARED uint8_t* wmMenuItem(uint8_t *menu, uint8_t index) {
+  uint8_t *at = (uint8_t*) wmSkipText(menu) + 1;
+  for (; index > 0; index--) {
+    at = (uint8_t*) wmSkipText(wmSkipText(at + 2));
+  }
+  return at;
+}
+
+/// @fn static uint8_t* wmMenu(const WmWidget *bar, uint8_t index)
+///
+/// @brief Find one of a menu bar's menus.
+///
+/// @param bar The menu bar.
+/// @param index The menu's index, which must be under its number of menus.
+///
+/// @return Returns a pointer to the menu's title length byte.
+WM_SHARED uint8_t* wmMenu(const WmWidget *bar, uint8_t index) {
+  uint8_t *at = (uint8_t*) bar->text;
+  for (; index > 0; index--) {
+    at = wmMenuItem(at, *wmSkipText(at));
+  }
+  return at;
+}
+
+/// @fn static void wmDiscardCanvas(WmState *state, WmWidget *widget)
+///
+/// @brief Discard a canvas's preuploads, if the widget is a canvas with
+/// any and the window server isn't ending.  Its WmCanvas is left for the
+/// caller to free.
+///
+/// @param state The window manager's state.
+/// @param widget The widget.
+///
+/// @return This function returns no value.
+WM_SHARED void wmDiscardCanvas(WmState *state, WmWidget *widget) {
+  WmCanvas *canvas = (WmCanvas*) widget->text;
+  if ((widget->kind != WIN_WIDGET_CANVAS) || (canvas == NULL)
+    || state->ending
+  ) {
+    return;
+  }
+  for (uint8_t ii = 0; ii < canvas->count; ii++) {
+    gfxDiscardPreupload(&state->display, canvas->preloads[ii]);
+  }
+  canvas->count = 0;
+}
+
+/// @def WM_DOUBLE_CLICK_MS
+///
+/// @brief The longest time between two presses that make a
+/// double-click.
+#define WM_DOUBLE_CLICK_MS 500
+
+/// @def WM_DOUBLE_CLICK_DISTANCE
+///
+/// @brief The farthest two presses that make a double-click
+/// can be apart on either axis.
+#define WM_DOUBLE_CLICK_DISTANCE 4
+
+/// @fn static uint32_t wmNowMs(WmState *state)
+///
+/// @brief Get the time since the window server started.  The clock is read
+/// when an input message is handled, since GfxEvent carries no time.
+///
+/// @param state The window manager's state.
+///
+/// @return Returns the milliseconds since the window server started.
+WM_SHARED uint32_t wmNowMs(WmState *state) {
+  struct timespec now;
+  timespec_get(&now, TIME_UTC);
+  return (uint32_t) (((now.tv_sec - state->started.tv_sec) * 1000L)
+    + ((now.tv_nsec - state->started.tv_nsec) / 1000000L));
+}
+
+/// @fn static bool wmDoubleClick(WmState *state, const WmWindow *window,
+///   int16_t pointX, int16_t pointY)
+///
+/// @brief Determine whether a press on a title bar or a list item is the
+/// second of a double-click, and remember it as the first of the next one
+/// if not.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+/// @param pointX The pointer's column.
+/// @param pointY The pointer's row.
+///
+/// @return Returns true if it is, false otherwise.
+WM_SHARED bool wmDoubleClick(WmState *state, const WmWindow *window,
+  int16_t pointX, int16_t pointY
+) {
+  uint32_t now = wmNowMs(state);
+  int16_t distanceX = pointX - state->lastPressAt.x;
+  int16_t distanceY = pointY - state->lastPressAt.y;
+  if ((state->lastPressWindow == window->id)
+    && (now - state->lastPressTime <= WM_DOUBLE_CLICK_MS)
+    && (distanceX <= WM_DOUBLE_CLICK_DISTANCE)
+    && (distanceX >= -WM_DOUBLE_CLICK_DISTANCE)
+    && (distanceY <= WM_DOUBLE_CLICK_DISTANCE)
+    && (distanceY >= -WM_DOUBLE_CLICK_DISTANCE)
+  ) {
+    state->lastPressWindow = 0;
+    return true;
+  }
+  state->lastPressWindow = window->id;
+  state->lastPressTime = now;
+  state->lastPressAt.x = pointX;
+  state->lastPressAt.y = pointY;
+  return false;
+}
+
 /// @fn static WmWindow* wmRaise(WmState *state, WmWindow *window)
 ///
-/// @brief Move a window to the top of its layer, repainting it if it moved.
+/// @brief Move a window to the top of its layer, and have the Restack
+/// overlay repaint what the windows it moved above were covering of it.
+/// The work is left to that overlay because its size would overflow the
+/// overlays that call this.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
@@ -708,10 +1263,17 @@ WM_SHARED WmWindow* wmRaise(WmState *state, WmWindow *window) {
   }
   if (top != index) {
     WmWindow raised = *window;
+    if (state->raised != 0) {
+      WmWindow *earlier = wmFind(state, state->raised);
+      if (earlier != NULL) {
+        wmDamage(state, &earlier->frame);
+      }
+    }
     memmove(&state->windows[index], &state->windows[index + 1],
       sizeof(WmWindow) * (size_t) (top - index));
     state->windows[top] = raised;
-    wmDamage(state, &raised.frame);
+    state->raised = raised.id;
+    state->raisedFrom = index;
   }
   return &state->windows[top];
 }
@@ -880,8 +1442,10 @@ WM_SHARED WmWindow* wmActivate(WmState *state, WmWindow *window) {
     && (state->active != id)
   ) {
     wmDamageDecorations(state, state->active);
+    state->refocus[0] = state->active;
     state->active = id;
     wmDamageDecorations(state, id);
+    state->refocus[1] = id;
   }
   if (state->focus != id) {
     wmFocus(state, state->focus, 0);
@@ -961,6 +1525,236 @@ WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
     body->w -= 2 * WM_BORDER;
     body->h -= WM_FRAME_TOP + WM_BORDER;
   }
+}
+
+/// @fn static void wmWidgetRect(const WmWindow *window,
+///   const WmWidget *widget, GfxRect *rect)
+///
+/// @brief Find where a widget is on the screen:  its template rectangle,
+/// kept as far from the body's right or bottom edge as it was if it is
+/// anchored to that edge, and stretched if it is anchored to both of an
+/// axis's edges.
+///
+/// @param window The widget's window.
+/// @param widget The widget.
+/// @param rect Where to store the widget's rectangle, in screen coordinates.
+///
+/// @return This function returns no value.
+WM_SHARED void wmWidgetRect(const WmWindow *window, const WmWidget *widget,
+  GfxRect *rect
+) {
+  GfxRect body;
+  wmBody(window, &body);
+  *rect = widget->rect;
+  if ((widget->anchor & WIN_ANCHOR_RIGHT) != 0) {
+    int16_t right = body.w - widget->marginRight;
+    if ((widget->anchor & WIN_ANCHOR_LEFT) != 0) {
+      rect->w = right - rect->x;
+    } else {
+      rect->x = right - rect->w;
+    }
+  }
+  if ((widget->anchor & WIN_ANCHOR_BOTTOM) != 0) {
+    int16_t bottom = body.h - widget->marginBottom;
+    if ((widget->anchor & WIN_ANCHOR_TOP) != 0) {
+      rect->h = bottom - rect->y;
+    } else {
+      rect->y = bottom - rect->h;
+    }
+  }
+  rect->x += body.x;
+  rect->y += body.y;
+}
+
+/// @fn static WmWidget* wmWidgetById(WmWidgets *widgets, uint8_t id)
+///
+/// @brief Find a window's widget by its identifier.
+///
+/// @param widgets The window's widgets, or NULL.
+/// @param id The identifier, which isn't 0.
+///
+/// @return Returns the widget, or NULL if the window has none of that
+/// identifier.
+WM_SHARED WmWidget* wmWidgetById(WmWidgets *widgets, uint8_t id) {
+  for (uint8_t ii = 0; (widgets != NULL) && (ii < widgets->count); ii++) {
+    if (widgets->widget[ii].id == id) {
+      return &widgets->widget[ii];
+    }
+  }
+  return NULL;
+}
+
+/// @fn WM_SHARED void wmDamageWidget(WmState *state, const WmWindow *window,
+///   const WmWidget *widget)
+///
+/// @brief Mark where a widget is to be painted again.
+///
+/// @param state The window manager's state.
+/// @param window The widget's window.
+/// @param widget The widget.
+///
+/// @return This function returns no value.
+WM_SHARED void wmDamageWidget(WmState *state, const WmWindow *window,
+  const WmWidget *widget
+) {
+  GfxRect rect;
+  wmWidgetRect(window, widget, &rect);
+  wmDamageOwned(state, &rect, window->id);
+}
+
+/// @fn static void wmReleaseChanged(WmState *state)
+///
+/// @brief Send the WIN_EVENT_CHANGED held for a text field now, with its
+/// text's length, so that it reaches its owner before what follows.
+///
+/// @param state The window manager's state.
+///
+/// @return This function returns no value.
+WM_SHARED void wmReleaseChanged(WmState *state) {
+  WmWindow *window = wmFind(state, state->heldWindow);
+  WmWidget *field = (window != NULL)
+    ? wmWidgetById((WmWidgets*) window->widgets, state->heldWidget) : NULL;
+  if (field != NULL) {
+    wmChanged(state, window, field, field->textLength);
+  }
+  state->heldWindow = 0;
+}
+
+/// @fn static uint16_t wmTextStorage(const WmWidget *widget)
+///
+/// @brief Find the bytes a widget's text takes on the heap:  a text field's
+/// most, which its storage holds from the start, a list's items, and any
+/// other widget's text.
+///
+/// @param widget The widget.
+///
+/// @return Returns the bytes.
+WM_SHARED uint16_t wmTextStorage(const WmWidget *widget) {
+  if (widget->kind == WIN_WIDGET_TEXT_FIELD) {
+    return widget->maxLength;
+  } else if ((widget->kind == WIN_WIDGET_LIST)
+    || (widget->kind == WIN_WIDGET_MENU_BAR)
+    || (widget->kind == WIN_WIDGET_CANVAS)
+  ) {
+    return widget->itemsSize;
+  }
+  return widget->textLength;
+}
+
+/// @fn static uint16_t wmListRows(const GfxRect *rect)
+///
+/// @brief Find how many rows of items a list of a size shows.
+///
+/// @param rect The list's rectangle.
+///
+/// @return Returns the number of rows.
+WM_SHARED uint16_t wmListRows(const GfxRect *rect) {
+  int16_t rows = (rect->h - 2) / WM_LIST_ITEM_HEIGHT;
+  return (rows < 1) ? 1 : (uint16_t) rows;
+}
+
+/// @fn static void wmShowSelection(const WmWindow *window, WmWidget *list)
+///
+/// @brief Scroll a list as little as shows its selection, and no further
+/// than shows its last item at the bottom.
+///
+/// @param window The list's window.
+/// @param list The list.
+///
+/// @return This function returns no value.
+WM_SHARED void wmShowSelection(const WmWindow *window, WmWidget *list) {
+  GfxRect rect;
+  wmWidgetRect(window, list, &rect);
+  uint16_t rows = wmListRows(&rect);
+  if (list->value != WIN_NO_ITEM) {
+    if (list->value < list->top) {
+      list->top = list->value;
+    } else if (list->value >= list->top + rows) {
+      list->top = (uint16_t) (list->value - rows + 1);
+    }
+  }
+  if (list->top + rows > list->numItems) {
+    list->top = (list->numItems > rows) ? (uint16_t) (list->numItems - rows)
+      : 0;
+  }
+}
+
+/// @def WM_FIELD_INSET
+///
+/// @brief How far in from a text field's edge its text starts:  its border
+/// and a 3-pixel margin.
+#define WM_FIELD_INSET 4
+
+/// @fn static uint8_t wmFieldScroll(const WmState *state,
+///   const WmWindow *window, const WmWidget *widget)
+///
+/// @brief Find the first byte of a text field's text to show:  its scroll,
+/// moved as little as keeps the caret inside the field.
+///
+/// @param state The window manager's state.
+/// @param window The field's window.
+/// @param widget The text field.
+///
+/// @return Returns the byte.
+WM_SHARED uint8_t wmFieldScroll(const WmState *state, const WmWindow *window,
+  const WmWidget *widget
+) {
+  GfxRect rect;
+  wmWidgetRect(window, widget, &rect);
+  int16_t shown = (rect.w - 2 * WM_FIELD_INSET)
+    / state->display.builtInFont.glyphW;
+  if (shown < 1) {
+    shown = 1;
+  }
+  uint8_t scroll = widget->scroll;
+  if (widget->caret < scroll) {
+    scroll = widget->caret;
+  } else if (widget->caret - scroll > shown) {
+    scroll = (uint8_t) (widget->caret - shown);
+  }
+  return scroll;
+}
+
+/// @fn static int32_t wmGridBytes(uint8_t columns, uint8_t rows)
+///
+/// @brief Find the bytes of the heap a text grid of a size takes, which its
+/// window's owner is charged.
+///
+/// @param columns The grid's columns.
+/// @param rows The grid's rows.
+///
+/// @return Returns the bytes.
+WM_SHARED int32_t wmGridBytes(uint8_t columns, uint8_t rows) {
+  return (int32_t) sizeof(WmGrid)
+    + (int32_t) columns * rows * WM_GRID_PLANES;
+}
+
+/// @fn static bool wmCharge(WmState *state, ProcessId pid, int32_t bytes)
+///
+/// @brief Charge a client for bytes of the heap its windows take, or refund
+/// it for a negative number, unless the charge would take it past the
+/// budget.  The window server's own windows are free.
+///
+/// @param state The window manager's state.
+/// @param pid The client's ProcessId.
+/// @param bytes The bytes to charge.
+///
+/// @return Returns true if the bytes were charged, false if they would take
+/// the client past its budget.
+WM_SHARED bool wmCharge(WmState *state, ProcessId pid, int32_t bytes) {
+  for (uint8_t ii = 0; ii < state->numClients; ii++) {
+    WmClient *client = state->clients[ii];
+    if (client->pid != pid) {
+      continue;
+    }
+    int32_t used = (int32_t) client->used + bytes;
+    if ((bytes > 0) && (used > state->budget)) {
+      return false;
+    }
+    client->used = (uint16_t) ((used < 0) ? 0 : used);
+    return true;
+  }
+  return true;
 }
 
 /// @fn static void wmGridPlace(WmState *state, const WmWindow *window,
@@ -1072,6 +1866,26 @@ WM_SHARED void wmGridDirty(WmState *state, WmGrid *grid, uint8_t first,
   for (uint8_t row = first; (row <= last) && (row < grid->rows); row++) {
     grid->dirty[WM_GRID_DIRTY_BYTE(row)] |= WM_GRID_DIRTY_BIT(row);
     state->gridsDirty = true;
+  }
+}
+
+/// @fn static void wmGridCursor(WmGrid *grid)
+///
+/// @brief Swap the colors of the cell under a text grid's cursor, if it is
+/// shown, which is how the cursor is drawn:  once after a change to the grid,
+/// and again before the next, to take it away.
+///
+/// @param grid The grid.
+///
+/// @return This function returns no value.
+WM_SHARED void wmGridCursor(WmGrid *grid) {
+  if (grid->cursorShown && (grid->cursorRow < grid->rows)
+    && (grid->cursorColumn < grid->columns)
+  ) {
+    uint8_t *attribute = &grid->cells[(size_t) grid->rows * grid->columns
+      + (size_t) grid->cursorRow * grid->columns + grid->cursorColumn];
+    *attribute = WIN_ATTRIBUTE(WIN_ATTRIBUTE_BACKGROUND(*attribute),
+      WIN_ATTRIBUTE_FOREGROUND(*attribute));
   }
 }
 

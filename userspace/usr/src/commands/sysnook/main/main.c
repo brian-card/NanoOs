@@ -346,10 +346,12 @@ static void applyEvents(WmState *state, const GfxInputEventsArgs *events) {
         input(state, event);
       }
       drag(state, event->x, event->y);
+    } else if ((down == wasDown) && (state->grab >= WM_GRAB_WIDGET)) {
+      input(state, event);
     } else if (down == wasDown) {
       hover(state, event->x, event->y);
     }
-    if (down != wasDown) {
+    if ((down != wasDown) || (event->wheel != 0)) {
       input(state, event);
     }
   }
@@ -594,18 +596,11 @@ static bool run(WmState *state) {
       state->message = gridMessage;
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Grid", "wmGrid", state);
     }
-    if ((state->numOutbox > 0) || postsDone(state)
-      || ((message == NULL) && state->eventsWaiting)
-    ) {
-      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientFlush",
-        state);
-    }
-    if (state->deferring) {
-      continue;
-    }
-    if (frameNeeded(state)) {
+    if (!state->deferring && frameNeeded(state)) {
       paint(state);
-      if ((state->times != NULL) && events && (grab != WM_GRAB_NONE)) {
+      if ((state->times != NULL) && events
+        && ((grab == WM_GRAB_MOVE) || (grab == WM_GRAB_RESIZE))
+      ) {
         timeFrame(state, grab - WM_GRAB_MOVE, &start);
       } else if ((state->times != NULL) && state->echoKey
         && state->gridPainted
@@ -614,6 +609,12 @@ static bool run(WmState *state) {
         timeFrame(state, WM_TIMED_ECHO, &state->keySent);
       }
       state->gridPainted = false;
+    }
+    if ((state->numOutbox > 0) || postsDone(state)
+      || ((message == NULL) && state->eventsWaiting)
+    ) {
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientFlush",
+        state);
     }
   }
 }
@@ -635,6 +636,7 @@ int main(int argc, char **argv) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientStart",
         state);
       state->revoked = run(state);
+      state->ending = true;
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientEnd",
         state);
     } else {
