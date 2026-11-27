@@ -29,7 +29,7 @@
 ///
 /// @brief C entry point for NanoOs on the Agon Light 2.
 ///
-/// boot.asm zeros BSS and calls main().  main() initialises the HAL and
+/// boot.asm zeros BSS and calls main().  main() initializes the HAL and
 /// then hands control to the NanoOs scheduler, which never returns.
 
 #ifdef NANO_OS_AGON_LIGHT_2

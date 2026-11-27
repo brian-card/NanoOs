@@ -125,7 +125,7 @@ realStart:
     ; selects eZ80 bus mode on a non-multiplexed bus; CTL 0x08 enables the
     ; region with zero wait states.  Write order follows MOS - bounds, bus
     ; mode, then control last, so the region goes live only once fully
-    ; described.  The emulator honours only the bound registers and quietly
+    ; described.  The emulator honors only the bound registers and quietly
     ; ignores BMC / CTL.
     LD  A, 0x04                 ; CS0_LBR - lower bound page (0x040000)
     OUT0 (0xA8), A
@@ -196,7 +196,7 @@ realStart:
     ; External SRAM: 0x040000–0x0BFFFF (512 KB).
     LD  SP, 0x0C0000
 
-    ; Copy initialised data from its load image in flash (__data_load__, laid
+    ; Copy initialized data from its load image in flash (__data_load__, laid
     ; down by the linker right after .text) to its run location in external
     ; SRAM (__data_start__).  Skip the loop when __data_size == 0.
     LD  HL, __data_load__

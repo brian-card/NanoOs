@@ -101,7 +101,7 @@ SECTIONS
   ASSERT(__ivt_end <= 0x10000,
     "Interrupt vector table + .text.ivt overflow the first 64 KB")
 
-  /* ---- Zero-initialised data: external SRAM, emitted before .data -------- */
+  /* ---- Zero-initialized data: external SRAM, emitted before .data -------- */
   .bss :
   {
     . = ALIGN(4);
@@ -113,7 +113,7 @@ SECTIONS
     __bss_size  = ABSOLUTE(__bss_end__ - __bss_start);   /* referenced by Boot.asm */
   } > RAM
 
-  /* ---- Uninitialised data: external SRAM, neither zeroed nor copied by
+  /* ---- Uninitialized data: external SRAM, neither zeroed nor copied by
    * Boot.asm, so it survives a soft reset ------------------------------- */
   .persistent (NOLOAD) :
   {
@@ -122,7 +122,7 @@ SECTIONS
     . = ALIGN(4);
   } > RAM
 
-  /* ---- Initialised data: VMA in external SRAM, LMA in flash after .text -- */
+  /* ---- Initialized data: VMA in external SRAM, LMA in flash after .text -- */
   .data : AT (__etext)
   {
     . = ALIGN(4);

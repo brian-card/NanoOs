@@ -1202,7 +1202,7 @@ int agonLight2EnterMode(int32_t deviceId, va_list args) {
   // 0x00 ends the emulator with the low byte as its exit status (mirrors the
   // POSIX HAL's exit(0) for OFF); 0x00 is an unused I/O address on real
   // eZ80F92 silicon, so that write is a harmless no-op there and
-  // agonLight2Off (di; sleep loop) is the actual behaviour.
+  // agonLight2Off (di; sleep loop) is the actual behavior.
   agonLight2WritePort(0x0000, 0x00);
   agonLight2Off();
 
@@ -1288,7 +1288,7 @@ void agonLight2TimerInterruptHandler5(void);
 /// allowed, as is any call made before the scheduler is up
 /// (getRunningProcess() == NULL).
 ///
-/// @param deviceId The zero-based ID of the timer being cancelled or re-armed.
+/// @param deviceId The zero-based ID of the timer being canceled or re-armed.
 ///   Must already have been range-checked by the caller.
 ///
 /// @return Returns 0 if the operation is permitted, -EACCES if not.

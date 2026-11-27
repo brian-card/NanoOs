@@ -44,7 +44,7 @@ extern "C" {
 
 /// @fn int halAgonLight2Init(void)
 ///
-/// @brief Initialise the HAL for the Agon Light 2.
+/// @brief Initialize the HAL for the Agon Light 2.
 ///
 /// Wires all HAL subsystem function tables, sets memory-layout parameters,
 /// then calls halCommonInit() to finish the common HAL setup.

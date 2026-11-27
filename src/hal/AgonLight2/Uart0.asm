@@ -257,7 +257,7 @@ _agonLight2WriteUart0Impl:
     add     ix, sp
 
     ;; Bounded wait for CTS0 (MSR bit 4 set = peer is clear to send).  The
-    ;; eZ80F92 UART does not gate TX on CTS itself, so honour it here.  Give up
+    ;; eZ80F92 UART does not gate TX on CTS itself, so honor it here.  Give up
     ;; after ~8192 polls (~17 ms worst case) and send anyway, so an absent or
     ;; silent peer can slow TX but never wedge it.  BC is caller-saved under the
     ;; eZ80 C ABI.

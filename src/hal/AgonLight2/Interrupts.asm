@@ -48,7 +48,7 @@
 ;;; its own image occupies low flash and ld/AgonLight2.ld places .ivt and
 ;;; .text.ivt below 0x010000.
 ;;;
-;;; The table lives in its own initialised section (.ivt), kept in the image by
+;;; The table lives in its own initialized section (.ivt), kept in the image by
 ;;; KEEP(*(.ivt)) in ld/AgonLight2.ld.  It ends up in flash, so it is
 ;;; read-only at run time - a vector is bound only by editing its .short line
 ;;; here at build time, not by any runtime call.  Every slot starts out
@@ -161,7 +161,7 @@ __nanoOsIvt:
 ;;;
 ;;; @details This is a one-time bring-up call, not a critical-section re-enable
 ;;; primitive - it reloads I and re-selects the mode, which a plain "ei" would
-;;; not.  Call it exactly once, as the very last step of HAL initialisation,
+;;; not.  Call it exactly once, as the very last step of HAL initialization,
 ;;; after every peripheral has been configured: the moment it returns, any
 ;;; armed source can fire and must find a real handler in its slot.  Interrupts
 ;;; are disabled from reset through to this call (boot/AgonLight2/Boot.asm no
@@ -180,7 +180,7 @@ _enableInterrupts:
 ;;;
 ;;; @brief Catch-all handler for any vector a driver has not claimed.
 ;;;
-;;; @details Matches the RST/NMI stub behaviour in boot/AgonLight2/Boot.asm:
+;;; @details Matches the RST/NMI stub behavior in boot/AgonLight2/Boot.asm:
 ;;; stop hard and obviously instead of silently returning.  An unexpected
 ;;; interrupt means a peripheral was left armed or a slot is wrong, and a
 ;;; silent reti.l would just livelock on the re-asserting source.
