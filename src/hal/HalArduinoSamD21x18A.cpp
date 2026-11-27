@@ -364,7 +364,7 @@ static_assert(offsetof(SavedContext, sp)  == 60, "asm offset");
 /// processes with privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE, immediately
 /// before resuming one (Scheduler.c, both the runScheduler path and
 /// schedulerSendSignalCommandHandler's user-process path).  If that process
-/// yields voluntarily before the 10ms is up and the timer is not cancelled,
+/// yields voluntarily before the 10ms is up and the timer is not canceled,
 /// the timer is still armed while the scheduler -- or any other
 /// KERNEL/EXECUTIVE process -- runs.  When it then fires, this handler
 /// hijacks whatever was executing at that instant and hands it to
@@ -1385,7 +1385,7 @@ static int arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
   // The peripheral INTFLAG above and the NVIC's pending bit are separate:
   // if the timer overflowed before we got here, the NVIC has already latched
   // a pending interrupt, and clearing INTFLAG does not retract it.  Without
-  // this, a cancelled timer still delivers one more interrupt -- with
+  // this, a canceled timer still delivers one more interrupt -- with
   // INTFLAG now reading clear, so the handler cannot even tell it is
   // spurious -- and that interrupt lands on whatever is running next, which
   // is exactly the stale-timer preemption this cancel is meant to prevent.
@@ -1556,13 +1556,13 @@ static void arduinoSamD21x18ATimerFrameHandler(
     // Clear interrupt flag
     hwTimer->tc->COUNT16.INTFLAG.reg = TC_INTFLAG_OVF;
   } else {
-    // The peripheral is not signalling an overflow, so this interrupt was
+    // The peripheral is not signaling an overflow, so this interrupt was
     // latched in the NVIC before something cleared INTFLAG underneath it --
-    // a timer that was cancelled after it had already expired.  There is no
+    // a timer that was canceled after it had already expired.  There is no
     // preemption being requested here, so returning without retargeting
     // exceptionFrame[6] resumes the interrupted code untouched.  (Cancel now
     // calls NVIC_ClearPendingIRQ, so this should no longer be reachable; it
-    // stays because honouring a spurious interrupt means corrupting whatever
+    // stays because honoring a spurious interrupt means corrupting whatever
     // was running, which is too expensive a failure to leave to inference.)
     return;
   }
@@ -1584,7 +1584,7 @@ static void arduinoSamD21x18ATimerFrameHandler(
   //
   // This should no longer fire: the scheduler now cancels the timer after
   // every processResume(), which closed the exit-without-yield path that
-  // produced these.  It stays as an invariant check, because honouring such
+  // produced these.  It stays as an invariant check, because honoring such
   // an interrupt silently corrupts whichever kernel process was running.
   ProcessDescriptor *runningProcess = getRunningProcess();
   if ((runningProcess != NULL)
@@ -2432,7 +2432,7 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
   // Every coroutine stack is carved out of this one main stack by
   // coroutineAllocateStack, so the slabs are adjacent and separated only by
   // each coroutine's stack-end canary.  A process that overruns its budget
-  // writes straight into its neighbour's stack, smashing saved return
+  // writes straight into its neighbor's stack, smashing saved return
   // addresses -- which is why faults land in function epilogues with an LR
   // that makes no sense for the call site.  Report each stack's boundary and
   // whether its canary survived, which names the process that overran.

@@ -998,7 +998,7 @@ void* timerThreadFunction(void *arg) {
 void timerSignalHandler(int timer) {
   SoftwareTimer *swTimer = &softwareTimers[timer];
   if (!swTimer->fired) {
-    // Sent by a timer thread that has since been cancelled.
+    // Sent by a timer thread that has since been canceled.
     return;
   }
 
