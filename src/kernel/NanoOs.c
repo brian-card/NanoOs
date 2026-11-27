@@ -202,15 +202,15 @@ void preemptionCallback(void *stateData) {
 /// @fn void signalCallback(
 ///   void *stateData, Cocondition *cocondition)
 ///
-/// @brief Function to be called when a condition (Cocondition) is signalled.
+/// @brief Function to be called when a condition (Cocondition) is signaled.
 ///
 /// @param stateData The thread state pointer provided when threadConfig
 ///   was called.
 /// @param cocondition A pointer to the Cocondition object that has been
-///   signalled.  At the time this callback is called, the number of signals has
-///   been set to the number of waiters that will be signalled.
+///   signaled.  At the time this callback is called, the number of signals has
+///   been set to the number of waiters that will be signaled.
 ///
-/// @return This function returns no value, but each signalled process that is
+/// @return This function returns no value, but each signaled process that is
 /// found in one of the process queues is removed from that queue and pushed
 /// onto its ready queue.
 void signalCallback(void *stateData, Cocondition *cocondition) {

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Run every NanoOs test layer and summarise.  Intended for CI and for a
+# Run every NanoOs test layer and summarize.  Intended for CI and for a
 # quick local "is anything broken" check.
 #
 #   Layer 1  unit          plain tests, no kernel            (make -C test)

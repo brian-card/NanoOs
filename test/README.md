@@ -145,7 +145,7 @@ unless a test calls `mockTimerFire()`, console I/O driven byte by byte.
 
 ## Bugs found (see `test/BUGS.txt`)
 
-- **BUG-1** — `timespecFromDelay` double-counted seconds, never normalised
+- **BUG-1** — `timespecFromDelay` double-counted seconds, never normalized
   `tv_nsec`, 32-bit multiply overflow. **Fixed**; regression test
   `unit_time/timespecFromDelay_splits_ms_into_s_and_ns`.
 - **BUG-2** — `nanoOsStrtoll` valued letter digits 10 too low (every base >

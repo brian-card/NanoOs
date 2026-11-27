@@ -223,7 +223,7 @@ msg_t* msg_destroy(msg_t *msg) {
         msg->msg_sync->mtx_unlock(&msg->lock);
       }
     } else {
-      // We can't do any signalling.  Just tear down everything.
+      // We can't do any signaling.  Just tear down everything.
       msg->done = true;
       msg->waiting = false;
       msg->msg_sync->cnd_destroy(&msg->condition);

@@ -156,7 +156,7 @@ typedef union msg_endpoint_t {
 ///   when in use.
 /// @param from A msg_endpoint_t union that represents the sending entity.
 /// @param to A msg_endpoint_t union that represents the receiveing entity.
-/// @param condition A msg_cnd_t union that will allow for signalling between
+/// @param condition A msg_cnd_t union that will allow for signaling between
 ///   the endpoints.
 /// @param lock A msg_mtx_t union to guard the condition.
 /// @param configured Whether or not the members of the message that require
@@ -194,7 +194,7 @@ typedef struct msg_t {
 ///   this pointer.
 /// @param tail The tail of the message queue.  Messages will be added to this
 ///   pointer.
-/// @param condition A msg_cnd_t union that will allow for signalling between
+/// @param condition A msg_cnd_t union that will allow for signaling between
 ///   the endpoints.
 /// @param lock A msg_mtx_t union to guard the condition.
 /// @param dynamically_allocated Whether or not the message queue was
