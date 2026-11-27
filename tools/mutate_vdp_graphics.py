@@ -28,7 +28,7 @@
 
 """Mutation check of vdp.drv's graphics fixes and their e2e tests.
 
-Each mutation puts one driver defect from the graphics series' catalogue
+Each mutation puts one driver defect from the graphics series' catalog
 back, or takes one feature out, and runs through test/e2e/run.py the one
 test in the one simulator configuration that should notice.  A mutation
 passes when that test goes red, or, for one marked GREEN, when it stays

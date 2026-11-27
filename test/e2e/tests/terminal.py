@@ -41,7 +41,7 @@ from tests.vdp_drv import VDP_FONT_ID
 
 CELL_WIDTH = 6
 CELL_HEIGHT = 8
-# The CGA palette index of each ANSI colour, as ansiToCgaMap maps it.
+# The CGA palette index of each ANSI color, as ansiToCgaMap maps it.
 ANSI_TO_CGA = [0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11, 15]
 # The VDU PLOT code of a copy, which a scroll of a grid nothing covers is.
 PLOT_COPY = 0xBE
@@ -85,7 +85,7 @@ class GridModel:
 
     def cells(self):
         """Return the cells as FakeVdp.read_cells reads them back:  a blank
-        cell has no foreground, and colours are CGA palette indices."""
+        cell has no foreground, and colors are CGA palette indices."""
         return [[(ch, None if ch == " " else ANSI_TO_CGA[attribute & 15],
                   ANSI_TO_CGA[attribute >> 4])
                  for ch, attribute in zip(chars, attributes)]
@@ -165,7 +165,7 @@ def start_grid(session, commands="", columns=80, rows=24, x=40, y=40):
 
 # Step 2:  the text grid widget.
 
-def test_terminal_grid_text_is_drawn_exactly_in_its_colours(session):
+def test_terminal_grid_text_is_drawn_exactly_in_its_colors(session):
     base = start_grid(session, "put 1 0,0,0x0F hello put 1 1,5,0x1E Yellow "
                       "put 1 23,70,0x47 corner put 1 5,78,0x2F wrapped")
     model = GridModel(80, 24)
@@ -178,7 +178,7 @@ def test_terminal_grid_text_is_drawn_exactly_in_its_colours(session):
     check_clean(session)
 
 
-def test_terminal_grid_cursor_is_its_cell_in_swapped_colours(session):
+def test_terminal_grid_cursor_is_its_cell_in_swapped_colors(session):
     base = start_grid(session, "put 1 2,3,0x1E abc cursor 1 2,4,1")
     model = GridModel(80, 24)
     model.put(2, 3, 0x1E, "abc")
@@ -475,8 +475,8 @@ def canonical_codes(vdp):
 def console_as_read(vdp):
     """Return the VDP console's grid as the decoder would read a term grid
     showing the same:  glyphs as the decoder reads them back, a cell drawn
-    in one colour as a space with no foreground, and the cursor's cell in
-    its colours swapped."""
+    in one color as a space with no foreground, and the cursor's cell in
+    its colors swapped."""
     codes = canonical_codes(vdp)
     cells = vdp.grid_cells()
     with vdp.lock:
@@ -517,7 +517,7 @@ def wait_console_prompt(vdp, timeout=30):
 def differential(session, names):
     """Cat each stream of the corpus named on the VDP console, then in a term
     as big as the screen, and check that term's grid shows what the
-    console's did, cell for cell and colour for colour.
+    console's did, cell for cell and color for color.
 
     @param session The session.
     @param names The names of the streams.
@@ -567,7 +567,7 @@ def test_terminal_term_matches_the_console_for_text_and_wraps(session):
     differential(session, ["wraps", "tabs", "bottom"])
 
 
-def test_terminal_term_matches_the_console_for_colours(session):
+def test_terminal_term_matches_the_console_for_colors(session):
     differential(session, ["sgr", "clear"])
 
 

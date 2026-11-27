@@ -47,6 +47,9 @@ import os, re, subprocess, sys, time
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SYSNOOK = 'userspace/usr/src/commands/sysnook/'
 GRID = SYSNOOK + 'Grid/Grid.c'
+RESIZE = SYSNOOK + 'Resize/Resize.c'
+TEMPLATE = SYSNOOK + 'Template/Template.c'
+WM = SYSNOOK + 'include/Wm.h'
 INPUT = SYSNOOK + 'Input/Input.c'
 WINDOW = SYSNOOK + 'Window/Window.c'
 MAIN = SYSNOOK + 'main/main.c'
@@ -80,17 +83,17 @@ MUTATIONS = [
   '    state->next = NULL; (void) soon;',
   ['e2e/test_terminal_grid_burst_of_writes_is_painted_fewer_times_than_'
    'written']),
- ('no-cursor', GRID,
+ ('no-cursor', WM,
   '  if (grid->cursorShown && (grid->cursorRow < grid->rows)',
   '  if (false && (grid->cursorRow < grid->rows)',
-  ['e2e/test_terminal_grid_cursor_is_its_cell_in_swapped_colours']),
+  ['e2e/test_terminal_grid_cursor_is_its_cell_in_swapped_colors']),
  ('no-snapping', MAIN,
   '    snap(&target.x, &target.w, across, WM_MIN_WIDTH,',
   '    (void) snap; if (false) snap(&target.x, &target.w, across,'
   ' WM_MIN_WIDTH,',
   ['e2e/test_terminal_grid_resize_snaps_to_whole_cells_and_keeps_its_'
    'cells']),
- ('resize-loses-cells', GRID,
+ ('resize-loses-cells', RESIZE,
   '        memcpy(&cells[to], &grid->cells[from], keepColumns);',
   '        (void) from;',
   ['e2e/test_terminal_grid_resize_snaps_to_whole_cells_and_keeps_its_'
@@ -101,10 +104,10 @@ MUTATIONS = [
   '  parser->column++;\n'
   '  if ((parser->column + 1 >= parser->columns)\n',
   ['e2e/test_terminal_term_matches_the_console_for_text_and_wraps']),
- ('no-bright-colours', PARSE,
+ ('no-bright-colors', PARSE,
   '      bright = ANSI_COLORS_PER_SET;',
   '      bright = 0;',
-  ['e2e/test_terminal_term_matches_the_console_for_colours']),
+  ['e2e/test_terminal_term_matches_the_console_for_colors']),
  ('scroll-a-row-too-few', PARSE,
   '      parser->rows - parser->row) + 1);',
   '      parser->rows - parser->row) + 0);',
@@ -129,7 +132,7 @@ MUTATIONS = [
   '      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)',
   ['e2e/test_terminal_a_display_cant_send_its_session_input_or_a_size',
    'harness/session/the_output_servicer_cannot_send_a_split_port_input']),
- ('two-session-grids', WINDOW,
+ ('two-session-grids', TEMPLATE,
   '  if ((widgets == NULL) || (size != WIN_RECORD_HEADER_SIZE)',
   '  if ((widgets == NULL) || (size < WIN_RECORD_HEADER_SIZE)',
   ['e2e/test_terminal_only_a_session_grid_gets_a_session_and_only_one']),
@@ -137,7 +140,7 @@ MUTATIONS = [
   '      (unsigned int) (grid->rows * state->display.builtInFont.glyphH),',
   '      (unsigned int) state->display.height,',
   ['e2e/test_terminal_reports_from_a_client_are_only_the_real_size']),
- ('no-winsize', GRID,
+ ('no-winsize', RESIZE,
   '        grid->winsizeWanted = true;',
   '        grid->winsizeWanted = false;',
   ['e2e/test_terminal_termtest_size_follows_a_resize']),
@@ -146,7 +149,7 @@ MUTATIONS = [
   '        WIN_EVENT_SESSION_ENDED, window->id);',
   '      WinEvent *event = NULL;',
   ['e2e/test_terminal_a_display_cant_send_its_session_input_or_a_size']),
- ('no-close-on-destroy', WINDOW,
+ ('no-close-on-destroy', TEMPLATE,
   '    windowServerCloseSession(grid->port);',
   '    (void) grid->port;',
   ['e2e/test_terminal_destroying_a_session_window_ends_its_shell']),

@@ -487,8 +487,8 @@ class FakeVdpCanvasTest(unittest.TestCase):
                          self.vdp.errors)
 
 
-class FakeVdpGridColourTest(unittest.TestCase):
-    """The colours of the fake VDP's console text grid."""
+class FakeVdpGridColorTest(unittest.TestCase):
+    """The colors of the fake VDP's console text grid."""
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -506,7 +506,7 @@ class FakeVdpGridColourTest(unittest.TestCase):
         """
         self.vdp._read(BytesConnection(data))
 
-    def test_text_colours_set_the_colours_of_each_cell_drawn(self):
+    def test_text_colors_set_the_colors_of_each_cell_drawn(self):
         self.send([17, RED, 17, 128 + BLUE] + list(b"ab") + [17, WHITE]
                   + list(b"c"))
         self.assertEqual([("a", RED, BLUE), ("b", RED, BLUE),
@@ -530,7 +530,7 @@ class FakeVdpGridColourTest(unittest.TestCase):
 
 
 class FakeVdpReadCellsTest(unittest.TestCase):
-    """Reading characters and colours back from the fake VDP's canvas."""
+    """Reading characters and colors back from the fake VDP's canvas."""
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

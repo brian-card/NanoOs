@@ -28,7 +28,7 @@
 
 """Mutation check of Graphics.h's defect fixes and their tests.
 
-Each mutation puts one defect from the graphics series' catalogue back into
+Each mutation puts one defect from the graphics series' catalog back into
 src/kernel/Graphics.h, rebuilds the harness through its own makefile, and
 runs each graphics_header test on its own under a timeout, since a broken
 wait can leave a test blocked forever.  A mutation passes when every test it

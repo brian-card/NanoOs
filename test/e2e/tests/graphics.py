@@ -574,13 +574,13 @@ def test_graphics_primitives_draw_with_exact_edges(session):
     disown(session)
 
 
-def glyph_pixels(vdp, font_id, code, colour):
+def glyph_pixels(vdp, font_id, code, color):
     """Return a glyph of a font FakeVdp holds as rows of palette indices.
 
     @param vdp The FakeVdp.
     @param font_id The font's ID.
     @param code The glyph's character code.
-    @param colour The palette index of its set pixels, on black.
+    @param color The palette index of its set pixels, on black.
 
     @return The rows.
     """
@@ -590,7 +590,7 @@ def glyph_pixels(vdp, font_id, code, colour):
     for row in range(height):
         start = (code * height + row) * row_bytes
         bits = int.from_bytes(data[start:start + row_bytes], "big")
-        rows.append([colour if bits & (1 << (row_bytes * 8 - 1 - column))
+        rows.append([color if bits & (1 << (row_bytes * 8 - 1 - column))
                      else gr.BLACK for column in range(width)])
     return rows
 
@@ -703,7 +703,7 @@ def test_graphics_a_new_owner_can_fill_every_image_slot(session):
 
 
 def paint_quarters(left, top):
-    """Return records that paint a 20x20 block of four colours.
+    """Return records that paint a 20x20 block of four colors.
 
     @param left The block's left column.
     @param top The block's top row.
@@ -715,7 +715,7 @@ def paint_quarters(left, top):
 
 
 def expected_copy(delta_x, delta_y):
-    """Return the 40x40 neighbourhood of a block painted by paint_quarters
+    """Return the 40x40 neighborhood of a block painted by paint_quarters
     at (10, 10) and then copied by an offset.
 
     @param delta_x How far right the copy goes.
@@ -726,9 +726,9 @@ def expected_copy(delta_x, delta_y):
     area = [[gr.BLACK] * 40 for _ in range(40)]
     for row in range(20):
         for column in range(20):
-            colour = [[gr.RED, gr.GREEN], [gr.BLUE, gr.YELLOW]][row // 10][
+            color = [[gr.RED, gr.GREEN], [gr.BLUE, gr.YELLOW]][row // 10][
                 column // 10]
-            area[10 + row][10 + column] = colour
+            area[10 + row][10 + column] = color
     copied = [cells[10:30] for cells in area[10:30]]
     for row in range(20):
         for column in range(20):
@@ -939,7 +939,7 @@ def start_owner(session, steps):
     session.child.expect(re.escape(READY) + r"\r*\n", timeout=30)
     lines = [line.strip() for line in session.child.before.splitlines()
              if line.strip().startswith("gfxprobe:")]
-    assert lines[-2:] == [CENTRE, "gfxprobe: events 1"], lines
+    assert lines[-2:] == [CENTER, "gfxprobe: events 1"], lines
 
 
 def printed(session, pattern):
@@ -969,7 +969,7 @@ def pointer(point_x, point_y, buttons=0, wheel=0):
             f"wheel {wheel}")
 
 
-CENTRE = pointer(320, 240)
+CENTER = pointer(320, 240)
 
 
 def test_graphics_pointer_moves_and_clicks_arrive_exactly(session):

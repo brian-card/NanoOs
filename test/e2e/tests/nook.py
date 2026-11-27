@@ -36,7 +36,7 @@ import time
 import pexpect
 
 import gfxrecords as gr
-from fakevdp import KEYMOD_ALT_LEFT
+from fakevdp import KEYMOD_ALT_LEFT, KEYMOD_ALT_RIGHT
 from harness import (PROMPT, VDP_CONFIG_SYS, heap_at_prompt,
                      message_args_reports, ps_entries, settled)
 from tests.graphics import (ACQUIRE, RELEASE, assert_pixels, glyph_pixels,
@@ -78,6 +78,7 @@ def boot_nook(session, **vdp_args):
     """
     if session.child.isalive():
         session.child.terminate(force=True)
+    session.write_file(DEMO_SCRIPT, DEMO_COMMANDS)
     for directory in HOMES:
         subprocess.run(["mmd", "-D", "s", "-i",
                         session.img_copy + "@@2097152",
@@ -103,7 +104,7 @@ def vdp_login_as(vdp, user, password):
 
 
 def wait_pixels(vdp, expected, timeout=30):
-    """Wait until pixels of a FakeVdp's canvas have colours.
+    """Wait until pixels of a FakeVdp's canvas have colors.
 
     @param vdp The FakeVdp.
     @param expected A dictionary of (x, y) to palette index.
@@ -129,25 +130,40 @@ def corner_point(frame):
     return (left + width - 1, top + height - 1)
 
 
-def run_nook(vdp, options="", demo=True):
+# The three windows graphics 6's --demo drew, made by a wintest that stays
+# until nook ends:  two plain ones, and window 2, whose body is a canvas of
+# 192 cells.  The script is a file, since it's longer than a command line.
+DEMO_SCRIPT = "/etc/nookdemo"
+DEMO_COMMANDS = ("window 24,24,200,150 Window_0 face 1 0xAAAAAAFF "
+                 "window 260,40,180,130 Window_1 face 2 0xFFFF55FF "
+                 "canvas 1 0,0,320,240 window 300,200,322,256 Window_2 "
+                 "cells 3 1 192 wait 3600000")
+
+
+def run_nook(vdp, options="", demo=True, session=None):
     """Run nook on the VDP console and wait until the window manager has
-    painted the screen:  the demonstration windows, or the desktop alone.
+    painted the screen:  the three windows a wintest on UART1 makes, or the
+    desktop alone.
 
     @param vdp The FakeVdp.
     @param options nook's options.
-    @param demo Whether to pass --demo.
+    @param demo Whether to make the three windows, which needs the session.
+    @param session The session.
 
     @return The number of context commands FakeVdp had received before.
     """
     base = len(vdp.context_events())
-    line = ("nook --finish " + ("--demo " if demo else "") + options).strip()
+    line = ("nook --finish " + options).strip()
     vdp.type(line + "\r")
     assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
+    wait_pixels(vdp, {(0, 0): DESKTOP, (639, 479): DESKTOP,
+                      (320, 240): DESKTOP})
     if demo:
-        wait_pixels(vdp, {corner_point(FRAMES[2]): TITLE_BAR})
-    else:
-        wait_pixels(vdp, {(0, 0): DESKTOP, (639, 479): DESKTOP,
-                          (320, 240): DESKTOP})
+        run_client(session, "@" + DEMO_SCRIPT)
+        expect_line(session, "wintest: cells 3: ok", timeout=60)
+        left, top = FRAMES[2][0] + BORDER, FRAMES[2][1] + FRAME_TOP
+        wait_pixels(vdp, {corner_point(FRAMES[2]): TITLE_BAR,
+                          (left + 311, top + 231): cell_fill(11, 15)})
     settle(vdp)
     return base
 
@@ -165,7 +181,7 @@ def start_nook(session, options="", user=None, demo=True):
     """
     vdp = session.vdp
     vdp_login_as(vdp, *(user or ("root", "rootroot")))
-    return run_nook(vdp, options, demo)
+    return run_nook(vdp, options, demo, session)
 
 
 def quit_nook(session, base):
@@ -225,7 +241,7 @@ def test_nook_the_revoke_key_gives_the_console_back_cleared_to_its_prompt(
     vdp.type("echo before\r")
     vdp.expect(r"\r\nbefore\r\n" + PROMPT)
     prompt = [line for line in vdp.grid_lines() if line][-1]
-    base = run_nook(vdp)
+    base = run_nook(vdp, session=session)
     wait_pixels(vdp, {(0, 0): DESKTOP, (639, 479): DESKTOP})
     quit_nook(session, base)
     # The driver clears the screen when it takes the display back, and
@@ -266,7 +282,7 @@ def kill_sysnook_from_uart(session, user):
     """
     session.child.sendline("exit")
     session.login(*user)
-    base = start_nook(session, user=("user1", "user1user1"))
+    base = start_nook(session, user=("user1", "user1user1"), demo=False)
     return session.sh("kill %d" % sysnook_pid(session)), base
 
 
@@ -306,22 +322,22 @@ def test_nook_another_users_kill_is_refused(session):
 
 # Step 2:  the windows and their painting.
 
-def glyph_on(vdp, code, colour, background):
+def glyph_on(vdp, code, color, background):
     """Return a glyph of the driver's font as rows of palette indices.
 
     @param vdp The FakeVdp.
     @param code The character code.
-    @param colour The palette index of its set pixels.
+    @param color The palette index of its set pixels.
     @param background The palette index under its clear pixels.
 
     @return The rows.
     """
     return [[background if pixel == gr.BLACK else pixel for pixel in row]
-            for row in glyph_pixels(vdp, VDP_FONT_ID, code, colour)]
+            for row in glyph_pixels(vdp, VDP_FONT_ID, code, color)]
 
 
 def cell_fill(row, column):
-    """Return the fill colour of a cell of window 2."""
+    """Return the fill color of a cell of window 2."""
     return CELL_FILLS[(row + column) & 3]
 
 
@@ -388,21 +404,48 @@ def test_nook_paints_its_windows_exactly(session):
     check_clean(session)
 
 
-def test_nook_cells_painted_by_call_match_cells_sent_as_records(session):
+def cells_body(vdp):
+    """Return window 2's body as graphics 6's demonstration window drew it:
+    rows of 16 cells, each filled and outlined, with text across every third
+    row.
+
+    @param vdp The FakeVdp, whose font the text is drawn in.
+
+    @return Rows of palette indices, 320 by 240.
+    """
+    rows = [[0] * (16 * CELL) for _ in range(12 * CELL)]
+    for row in range(12):
+        for column in range(16):
+            left, top = column * CELL, row * CELL
+            for y in range(top, top + CELL):
+                for x in range(left, left + CELL):
+                    edge = y in (top, top + CELL - 1) or \
+                        x in (left, left + CELL - 1)
+                    rows[y][x] = CELL_EDGE if edge else cell_fill(row, column)
+    width, height, data = vdp.fonts[VDP_FONT_ID]
+    row_bytes = (width + 7) // 8
+    for row in range(0, 12, 3):
+        for index, code in enumerate(ROW_TEXT):
+            for y in range(height):
+                start = (code * height + y) * row_bytes
+                bits = int.from_bytes(data[start:start + row_bytes], "big")
+                for x in range(width):
+                    if bits & (1 << (row_bytes * 8 - 1 - x)):
+                        rows[row * CELL + 6 + y][index * width + x] = gr.WHITE
+    return rows
+
+
+def test_nook_window_2s_canvas_draws_the_cells_exactly(session):
     boot_nook(session)
     vdp = session.vdp
     calls = vdp.count_events("call")
     base = start_nook(session)
-    records = bytes(vdp.canvas)
-    assert vdp.count_events("call") == calls
-    quit_nook(session, base)
-    vdp.expect(PROMPT + "$")
-    base = len(vdp.context_events())
-    base = run_nook(vdp, "--content=call")
     assert_windows(vdp, FRAMES)
-    assert bytes(vdp.canvas) == records
-    # One call of a preloaded row for each of the 12 rows.
-    assert vdp.count_events("call") == calls + 12
+    left, top = FRAMES[2][0] + BORDER, FRAMES[2][1] + FRAME_TOP
+    assert vdp.pixels(left, top, 16 * CELL, 12 * CELL) == cells_body(vdp)
+    # The canvas's 2.6 KB of records are 6 preuploads of at most 512 bytes,
+    # called once each for the first frame of the window.
+    assert vdp.count_events("call") - calls == 6
     quit_nook(session, base)
     check_clean(session)
 
@@ -492,9 +535,33 @@ def test_nook_a_window_moved_across_another_and_back_restores_it_exactly(
     wait_pixels(vdp, expected)
     drag(vdp, (390, 255), (300, 45))
     # Moving window 1 made it active; a click on window 2 makes the stack
-    # and the colours what they were.
+    # and the colors what they were.
     click(vdp, (400, 300))
     wait_canvas(vdp, initial)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_move_ended_with_the_next_press_in_one_message_is_painted(
+        session):
+    # The last motion, the release and a press that starts another grab
+    # arrive in one input message, sent while the window server paints the
+    # motion before:  the move must still be painted where it ended.  A VDP
+    # reading 5 KB a second keeps that frame going while they arrive.
+    boot_nook(session, read_rate=5000)
+    vdp = session.vdp
+    base = start_nook(session, "--move=live")
+    vdp.mouse(300, 45)
+    vdp.mouse(300, 45, buttons=1)
+    for step in range(1, 10):
+        vdp.mouse(300 + 9 * step, 45 + 21 * step, buttons=1)
+        time.sleep(0.02)
+    vdp.mice_at_once([(390, 255, 1), (390, 255, 0), (100, 30, 0),
+                      (100, 30, 1), (100, 30, 0)])
+    expected = window_points(moved(FRAMES[1], 90, 210), BODIES[1],
+                             active=False)
+    expected[(FRAMES[1][0] + 5, FRAMES[1][1] + 5)] = DESKTOP
+    wait_pixels(vdp, expected)
     quit_nook(session, base)
     check_clean(session)
 
@@ -643,7 +710,7 @@ def restart_nook(session, base, options):
     vdp = session.vdp
     quit_nook(session, base)
     vdp.expect(PROMPT + "$")
-    return run_nook(vdp, options)
+    return run_nook(vdp, options, session=session)
 
 
 def outline_then_live(session, options, start, end, grabbed, outline):
@@ -748,7 +815,7 @@ def test_nook_gives_back_all_the_memory_it_used(session):
     vdp_login_as(vdp, "root", "rootroot")
     heaps = []
     for _run in range(24):
-        base = run_nook(vdp, "--content=call --move=live")
+        base = run_nook(vdp, "--move=live", session=session)
         drag(vdp, (300, 45), (390, 255))
         wait_pixels(vdp, window_points(moved(FRAMES[1], 90, 210), BODIES[1]))
         quit_nook(session, base)
@@ -808,7 +875,7 @@ def test_nook_runs_sysnook_at_executive_level_and_its_clients_at_user(session):
 
 def test_nook_another_users_client_cant_connect(session):
     boot_nook(session)
-    base = start_nook(session, user=("user1", "user1user1"))
+    base = start_nook(session, user=("user1", "user1user1"), demo=False)
     assert session.sh("wintest hello") == "wintest: error %d" % 2
     assert session.sh("echo $?") == "1"
     quit_nook(session, base)
@@ -886,7 +953,7 @@ def test_nook_eight_clients_fit_beside_the_desktop(session):
     # The clients print nothing:  more background processes printing on UART1
     # at once than the console has buffers stall waiting for one.
     boot_nook(session)
-    base = start_nook(session)
+    base = start_nook(session, demo=False)
     for _client in range(8):
         session.sh("wintest hold &")
     assert clients_running(session) == 8
@@ -947,18 +1014,18 @@ def expect_line(session, line, timeout=10):
     session.child.expect(re.escape(line) + r"\r*\n", timeout=timeout)
 
 
-def text_pixels(vdp, text, colour, background):
+def text_pixels(vdp, text, color, background):
     """Return a line of text in the driver's font as rows of palette
     indices.
 
     @param vdp The FakeVdp.
     @param text The text.
-    @param colour The palette index of its set pixels.
+    @param color The palette index of its set pixels.
     @param background The palette index under its clear pixels.
 
     @return The rows.
     """
-    glyphs = [glyph_on(vdp, ord(ch), colour, background) for ch in text]
+    glyphs = [glyph_on(vdp, ord(ch), color, background) for ch in text]
     return [sum((glyph[row] for glyph in glyphs), []) for row in range(8)]
 
 
@@ -984,7 +1051,7 @@ def decorated_points(frame, bar=ACCENT):
 
 def face_points(frame):
     """Return sample points of a decorated window's face, which keep their
-    colour whether the window is active or not.
+    color whether the window is active or not.
 
     @param frame The window's (left, top, width, height).
 
@@ -1221,13 +1288,30 @@ def test_nook_close_turns_red_under_the_pointer_repainting_only_itself(session):
                                  (hover_counts, out_counts),
                                  (out_counts, again_counts),
                                  (again_counts, pressed_counts))]
-    # One button:  its face and its glyph's two lines, in two colours.
+    # One button:  its face and its glyph's two lines, in two colors.
     assert deltas == [(3, 2, 0)] * 4, deltas
     quit_nook(session, base)
     check_clean(session)
 
 
 KEYCODE_F4 = 162
+
+
+def test_nook_a_raised_window_is_repainted_where_it_was_covered(session):
+    # Yellow window 2 covers part of window 1's body until window 1 is
+    # clicked; then that part is window 1's white body.
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 One create 100,10,200,100 Two "
+               "face 2 0xFFFF55FF")
+    expect_line(session, "wintest: face 2: ok")
+    wait_pixels(vdp, {(150, 80): gr.YELLOW, (60, 120): FACE})
+    click(vdp, (60, 120))
+    expect_line(session, "FOCUS 1 activated")
+    wait_pixels(vdp, {(150, 80): FACE, (250, 80): gr.YELLOW})
+    quit_nook(session, base)
+    check_clean(session)
 
 
 def test_nook_a_click_activates_the_window_under_it_and_tells_both(session):
@@ -1439,6 +1523,24 @@ def test_nook_minimize_hides_a_window_and_alt_tab_shows_it_again(session):
     expect_line(session, "STATE 1 normal")
     expect_line(session, "FOCUS 1 activated")
     wait_canvas(vdp, shown)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_the_right_alt_tabs_between_windows_as_the_left_does(session):
+    boot_nook(session)
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 One create 300,200,200,100 Two")
+    expect_line(session, "FOCUS 2 activated")
+    for modifier in (KEYMOD_ALT_RIGHT, KEYMOD_ALT_LEFT):
+        session.vdp.key_packet(9, modifier, KEYCODE_TAB)
+        session.vdp.key_packet(9, modifier, KEYCODE_TAB, down=0)
+        expect_line(session, "FOCUS 2 deactivated")
+        expect_line(session, "FOCUS 1 activated")
+        session.vdp.key_packet(9, modifier, KEYCODE_TAB)
+        session.vdp.key_packet(9, modifier, KEYCODE_TAB, down=0)
+        expect_line(session, "FOCUS 1 deactivated")
+        expect_line(session, "FOCUS 2 activated")
     quit_nook(session, base)
     check_clean(session)
 

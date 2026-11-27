@@ -40,12 +40,15 @@ import os, re, subprocess, sys, time
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 MAIN = 'userspace/usr/src/commands/sysnook/main/main.c'
 PAINT = 'userspace/usr/src/commands/sysnook/Paint/Paint.c'
+WIDGETS = 'userspace/usr/src/commands/sysnook/Widgets/Widgets.c'
 START = 'userspace/usr/src/commands/sysnook/Start/Start.c'
-CELLS = 'userspace/usr/src/commands/sysnook/include/WmCells.h'
+RESTACK = 'userspace/usr/src/commands/sysnook/Restack/Restack.c'
+DRAW = 'userspace/usr/src/commands/wintest/Draw/Draw.c'
+CANVAS = 'userspace/usr/src/commands/sysnook/Canvas/Canvas.c'
 CLIENT = 'userspace/usr/src/commands/sysnook/Client/Client.c'
 BUSY = 'nano-os-sim/test_nook_a_second_nook_is_told_the_display_is_busy'
 PAINTS = 'nano-os-sim/test_nook_paints_its_windows_exactly'
-CALL = 'nano-os-sim/test_nook_cells_painted_by_call_match_cells_sent_as_records'
+CALL = 'nano-os-sim/test_nook_window_2s_canvas_draws_the_cells_exactly'
 LANDS = 'nano-os-sim/test_nook_a_window_moved_live_lands_exactly_and_uncovers_the_desktop'
 ACROSS = 'nano-os-sim/test_nook_a_window_moved_across_another_and_back_restores_it_exactly'
 OFF_SCREEN = 'nano-os-sim/test_nook_a_window_moved_off_the_screen_and_back_is_repainted_exactly'
@@ -75,6 +78,8 @@ DRAG_RESTORE = 'nano-os-sim/test_nook_dragging_a_maximized_window_restores_it_un
 OUTSIDE = 'nano-os-sim/test_nook_a_grab_zone_reaches_2_pixels_outside_the_border'
 ZONES = 'nano-os-sim/test_nook_each_grab_zone_resizes_its_edges_and_holds_the_others'
 LEFT_MINIMUM = 'nano-os-sim/test_nook_a_left_edge_dragged_past_the_minimum_holds_the_right_edge'
+COALESCED = 'nano-os-sim/test_nook_a_move_ended_with_the_next_press_in_one_message_is_painted'
+RAISED = 'nano-os-sim/test_nook_a_raised_window_is_repainted_where_it_was_covered'
 HELD = 'nano-os-sim/test_nook_a_retitle_during_an_outline_drag_is_painted_on_release'
 
 MUTATIONS = [
@@ -87,12 +92,22 @@ MUTATIONS = [
  ('W2-no-border', [(PAINT,
   '    gfxCmdSetFgColor(cmd, border);\n'
   '    gfxCmdDrawRect(cmd, frame, false);\n', '')], PAINTS),
- ('W2-no-cell-edges', [(CELLS,
-  '      gfxCmdDrawRect(cmd, &cell, pass == WM_PASS_FILL);',
-  '      if (pass == WM_PASS_FILL) gfxCmdDrawRect(cmd, &cell, true);')],
+ ('W2-no-cell-edges', [(DRAW,
+  '    GfxPoint to = { right, at };\n    winCanvasLine(&canvas, from, to);\n',
+  '    GfxPoint to = { right, at };\n')],
   PAINTS),
- ('W2-preloads-never-called', [(PAINT,
-  '    gfxCmdCall(cmd, state->rows[row]);\n', '')], CALL),
+ ('W2-preloads-never-called', [(WIDGETS,
+  '    gfxCmdCall(cmd, canvas->preloads[ii]);\n', '')], CALL),
+ ('W3-move-lost-to-next-press', [(INPUT,
+  '    wmDamage(state, &state->shown);\n    wmDamage(state, &moved->frame);\n',
+  '')], COALESCED),
+ ('W5-raise-uncovers-nothing', [(RESTACK,
+  '        wmDamage(state, &covered);\n', '')], RAISED),
+ ('W2-discards-at-the-end', [(WM_H,
+  '    || state->ending\n', '')], REVOKED),
+ ('W2-no-pen-carried', [(CANVAS,
+  '      starting[ii] = pens[ii];\n',
+  '      starting[ii] = NULL;\n')], CALL),
  ('W3-no-windows-under-damage', [(PAINT,
   '      && meets(&window->frame, &clip)\n',
   '      && meets(&window->frame, &clip)\n'
@@ -175,7 +190,7 @@ MUTATIONS = [
   '      GfxRect before = window->frame;',
   '    if (false) {\n'
   '      GfxRect before = window->frame;')], RESERVE),
- ('P5-slow-double-click', [(INPUT,
+ ('P5-slow-double-click', [(WM_H,
   '#define WM_DOUBLE_CLICK_MS 500', '#define WM_DOUBLE_CLICK_MS 1000')],
   DOUBLE),
  ('P5-no-restore-on-drag', [(INPUT,

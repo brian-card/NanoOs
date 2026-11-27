@@ -48,11 +48,11 @@ def assert_vdp_set_up_on_answer(vdp):
         f"the VDP wasn't reset before the mode change: {resets}"
     setup = [(kind, detail)
              for _t, kind, detail in vdp.events[first_mode:first_mode + 14]]
-    assert setup == [("mode", 0), ("behaviour", (1, 0xFE)), ("layout", 1),
+    assert setup == [("mode", 0), ("behavior", (1, 0xFE)), ("layout", 1),
                      ("cls", None), ("cursor", 1), ("mouse", "reset"),
                      ("mouse", "disable"), ("pointer", VDP_HIDDEN_POINTER_ID),
                      ("font", VDP_FONT_ID),
-                     ("colour", CGA_WHITE), ("colour", 128 + CGA_BLACK),
+                     ("color", CGA_WHITE), ("color", 128 + CGA_BLACK),
                      ("cls", None), ("tab", (0, 0)),
                      ("text", setup[13][1])], \
         f"the screen wasn't set up first: {setup}"
@@ -213,13 +213,13 @@ def vdp_screen_events(vdp, start):
     """
     with vdp.lock:
         return [(kind, detail) for _, kind, detail in vdp.events[start:]
-                if kind in ("colour", "cls", "tab")]
+                if kind in ("color", "cls", "tab")]
 
 
 def test_vdp_color_and_clear_set_the_text_colors_and_clear(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
-    expected = [("colour", 15), ("colour", 128 + 2), ("cls", None),
+    expected = [("color", 15), ("color", 128 + 2), ("cls", None),
                 ("tab", (0, 0))]
     for command in ("color 2f", "clear"):
         vdp.clear()
@@ -544,7 +544,7 @@ def test_vdp_console_reports_its_size(s):
 def test_vdp_console_moves_the_cursor_and_erases_to_the_end_of_the_line(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
-    assert vdp.cursor_behaviour & 1, "scroll protect is off"
+    assert vdp.cursor_behavior & 1, "scroll protect is off"
     start = len(vdp.events)
     vdp.type("termtest erase\r")
     # termtest waits for input, so nothing drawn after the erase can finish it.

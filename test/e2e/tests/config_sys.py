@@ -105,7 +105,7 @@ def test_uart_console_left_out_of_config_sys_is_owned_by_no_one(s):
     s.child.sendcontrol("c")
     i = s.child.expect([r"Killing process \d+|Could not send message|"
                         r"Could not communicate", pexpect.TIMEOUT], timeout=3)
-    assert i == 1, "Ctrl-C on the unused UART signalled " + s.child.after
+    assert i == 1, "Ctrl-C on the unused UART signaled " + s.child.after
 
 
 def assert_device_is_refused(s, path):

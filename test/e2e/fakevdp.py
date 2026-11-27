@@ -33,20 +33,20 @@ FakeVdp listens on that socket, parses the VDU stream vdp.drv sends, and sends
 keyboard packets back.  Like the real VDP, it ignores everything but general
 polls until it has answered one.
 
-Contexts (VDU 23,0,&C8) are modelled for select and delete only.  A context
-holds the text cursor, text viewport, font, text colours, cursor behaviour
+Contexts (VDU 23,0,&C8) are modeled for select and delete only.  A context
+holds the text cursor, text viewport, font, text colors, cursor behavior
 and visibility, the logical-coordinates flag, and the graphics state; the
 grid of characters on the screen and the canvas of pixels are shared, as the
 real VDP's pixels are.  A context's own stack (commands 2 to 7) isn't
-modelled; those commands are recorded as errors.
+modeled; those commands are recorded as errors.
 
-Graphics are modelled in pixel coordinates only, on a canvas of palette
+Graphics are modeled in pixel coordinates only, on a canvas of palette
 indices:  PLOT lines, points, triangle, rectangle and circle fills, circle
 outlines, copies and bitmaps, VDU 16, 18, 24 and 29, and text at the graphics
 cursor (VDU 5).  Lines and rectangles are exact; circles and triangles are
 approximations whose edges don't match the real VDP's, so tests check only
 points well inside or outside them.  Bitmaps are drawn as if the paint mode
-were 0, and a bitmap colour that isn't exactly a palette entry's becomes the
+were 0, and a bitmap color that isn't exactly a palette entry's becomes the
 nearest by RGB distance rather than by the real VDP's HSV distance.
 """
 
@@ -86,10 +86,16 @@ KEYCODE_KEYPAD_PERIOD = 88
 KEYCODE_KEYPAD_NAVIGATION = [129, 136, 153, 149, 155, 158, 157, 134, 151,
                              147, 131]
 KEYCODE_SCROLLLOCK = 139
+KEYCODE_LALT = 119
+KEYCODE_RALT = 120
+KEYCODE_ESCAPE = 125
+KEYCODE_F10 = 168
 KEYCODE_NUMLOCK = 140
 KEYCODE_CAPSLOCK = 141
 KEYMOD_CTRL = 1 << 0
+KEYMOD_SHIFT = 1 << 1
 KEYMOD_ALT_LEFT = 1 << 2
+KEYMOD_ALT_RIGHT = 1 << 3
 KEYMOD_CAPS_LOCK = 1 << 4
 KEYMOD_NUM_LOCK = 1 << 5
 KEYMOD_SCROLL_LOCK = 1 << 6
@@ -108,7 +114,7 @@ MOUSE_SET_CURSOR = 3
 MOUSE_SET_POSITION = 4
 PACKET_MOUSE = 0x89
 SPRITES = 27
-CURSOR_BEHAVIOUR = 16
+CURSOR_BEHAVIOR = 16
 SCROLL = 7
 SCROLL_DOWN = 2
 SCROLL_UP = 3
@@ -138,22 +144,22 @@ CONTEXT = 0xC8
 CONTEXT_SELECT = 0
 CONTEXT_DELETE = 1
 PACKET_MODE = 0x86
-COLOUR_DEPTH = 16
+COLOR_DEPTH = 16
 BUFFERED_CALL = 1
 BUFFERED_CONSOLIDATE = 0x0E
 FLUSH_DRAWING_QUEUE = 0xCA
 FORMAT_RGBA8888 = 0
 # VDU 23,16 bit 6, which stops text at the graphics cursor wrapping.
-BEHAVIOUR_GRAPHICS_NO_WRAP = 0x40
+BEHAVIOR_GRAPHICS_NO_WRAP = 0x40
 # The state each VDP context keeps of its own.
 CONTEXT_FIELDS = ("grid_row", "grid_column", "grid_columns", "grid_rows",
-                  "viewport", "font", "cursor_behaviour", "cursor_enabled",
+                  "viewport", "font", "cursor_behavior", "cursor_enabled",
                   "logical_coords", "text_fg", "text_bg", "gfg", "gbg",
                   "gfg_mode", "gbg_mode", "gviewport", "origin", "points",
                   "user_point", "vdu5", "graphics_font")
 DEFAULT_GRAPHICS_FG = 15
 DEFAULT_GRAPHICS_BG = 0
-# The colours the driver sets the palette to, which the canvas's indices
+# The colors the driver sets the palette to, which the canvas's indices
 # stand for until VDU 19 changes one.
 CGA_PALETTE = [(0x00, 0x00, 0x00), (0x00, 0x00, 0xAA), (0x00, 0xAA, 0x00),
                (0x00, 0xAA, 0xAA), (0xAA, 0x00, 0x00), (0xAA, 0x00, 0xAA),
@@ -253,7 +259,7 @@ class FakeVdp:
         self.caps_lock = False
         self.scroll_lock = False
         self.leds = 0
-        self.cursor_behaviour = 0  # VDU 23,16 flags; bit 0 is scroll protect
+        self.cursor_behavior = 0  # VDU 23,16 flags; bit 0 is scroll protect
         # The text viewport set by VDU 28 as (left, top, right, bottom) cells,
         # or None for the whole screen.
         self.viewport = None
@@ -342,14 +348,14 @@ class FakeVdp:
                             self.mode = mode
                         self._event("mode", mode)
                 elif byte == 17:
-                    colour = next(stream)
+                    color = next(stream)
                     if self.listening:
                         with self.lock:
-                            if colour & 0x80:
-                                self.text_bg = colour & 0x7F
+                            if color & 0x80:
+                                self.text_bg = color & 0x7F
                             else:
-                                self.text_fg = colour
-                        self._event("colour", colour)
+                                self.text_fg = color
+                        self._event("color", color)
                 elif byte == 19:
                     logical, physical, red, green, blue = (
                         next(stream) for _ in range(5))
@@ -366,9 +372,9 @@ class FakeVdp:
                     if self.listening:
                         self._set_viewport(left, top, right, bottom)
                 elif byte == 18:
-                    mode, colour = next(stream), next(stream)
+                    mode, color = next(stream), next(stream)
                     if self.listening:
-                        self._gcol(mode, colour)
+                        self._gcol(mode, color)
                 elif byte == 24:
                     left, bottom, right, top = [self._signed(stream)
                                                 for _ in range(4)]
@@ -409,8 +415,8 @@ class FakeVdp:
                     with self.lock:
                         self.grid = [[" "] * self.grid_columns
                                      for _ in range(self.grid_rows)]
-                        self.grid_colours = [
-                            [self._grid_colour()] * self.grid_columns
+                        self.grid_colors = [
+                            [self._grid_color()] * self.grid_columns
                             for _ in range(self.grid_rows)]
                         self._fill(self.gviewport, self.gbg, self.gbg_mode)
                         self._push_point(0, 0)
@@ -542,13 +548,13 @@ class FakeVdp:
                 self._scroll(extent, direction, movement)
         elif first == SPRITES:
             self._sprites(stream)
-        elif first == CURSOR_BEHAVIOUR:
+        elif first == CURSOR_BEHAVIOR:
             setting, mask = next(stream), next(stream)
             if self.listening:
                 with self.lock:
-                    self.cursor_behaviour = (
-                        (self.cursor_behaviour & mask) ^ setting)
-                self._event("behaviour", (setting, mask))
+                    self.cursor_behavior = (
+                        (self.cursor_behavior & mask) ^ setting)
+                self._event("behavior", (setting, mask))
                 self._send_mode_packet()
         else:
             self.errors.append(f"VDU 23,{first}")
@@ -592,7 +598,7 @@ class FakeVdp:
                             SCREEN_WIDTH & 0xFF, SCREEN_WIDTH >> 8,
                             SCREEN_HEIGHT & 0xFF, SCREEN_HEIGHT >> 8,
                             self.grid_columns, self.grid_rows,
-                            COLOUR_DEPTH, self.mode])
+                            COLOR_DEPTH, self.mode])
         if conn is not None:
             try:
                 self._send(conn, packet)
@@ -621,6 +627,26 @@ class FakeVdp:
         data = struct.pack("<HHBbhh", position[0], position[1], buttons,
                            wheel, delta[0], delta[1])
         self._send(conn, bytes([PACKET_MOUSE, len(data)]) + data)
+
+    def mice_at_once(self, packets):
+        """Send several mouse packets in one write, so that the driver reads
+        them together and the window server gets them in one input
+        message.
+
+        @param packets Each packet's (column, row, buttons).
+        """
+        data = b""
+        with self.lock:
+            conn = self.conn
+            for column, row, buttons in packets:
+                delta = (column - self.mouse_position[0],
+                         row - self.mouse_position[1])
+                self.mouse_position = (column, row)
+                self.mouse_buttons = buttons
+                fields = struct.pack("<HHBbhh", column, row, buttons, 0,
+                                     delta[0], delta[1])
+                data += bytes([PACKET_MOUSE, len(fields)]) + fields
+        self._send(conn, data)
 
     def _reset_event(self, command, detail=None):
         if self.listening:
@@ -1032,7 +1058,7 @@ class FakeVdp:
             left, top, right, bottom = self.viewport or (
                 0, 0, self.grid_columns - 1, self.grid_rows - 1)
             for grid, blank in ((self.grid, " "),
-                                (self.grid_colours, self._grid_colour())):
+                                (self.grid_colors, self._grid_color())):
                 rows = [grid[row][left:right + 1]
                         for row in range(top, bottom + 1)]
                 blanks = [blank] * (right - left + 1)
@@ -1045,15 +1071,15 @@ class FakeVdp:
             self.lock.notify_all()
         self._event("scroll", direction)
 
-    def _grid_colour(self):
+    def _grid_color(self):
         """Return the (foreground, background) a cell drawn or blanked now
-        gets:  the text colours."""
+        gets:  the text colors."""
         return (getattr(self, "text_fg", DEFAULT_TEXT_FG),
                 getattr(self, "text_bg", DEFAULT_TEXT_BG))
 
     def _grid_clear(self):
         self.grid = [[" "] * self.grid_columns for _ in range(self.grid_rows)]
-        self.grid_colours = [[self._grid_colour()] * self.grid_columns
+        self.grid_colors = [[self._grid_color()] * self.grid_columns
                              for _ in range(self.grid_rows)]
         self.grid_row = self.grid_column = 0
 
@@ -1063,8 +1089,8 @@ class FakeVdp:
         else:
             del self.grid[0]
             self.grid.append([" "] * self.grid_columns)
-            del self.grid_colours[0]
-            self.grid_colours.append([self._grid_colour()]
+            del self.grid_colors[0]
+            self.grid_colors.append([self._grid_color()]
                                      * self.grid_columns)
 
     def _grid_draw(self, ch):
@@ -1075,10 +1101,10 @@ class FakeVdp:
             self.grid_column = 0
             self._grid_line_feed()
         self.grid[self.grid_row][self.grid_column] = ch
-        self.grid_colours[self.grid_row][self.grid_column] = (
-            self._grid_colour())
+        self.grid_colors[self.grid_row][self.grid_column] = (
+            self._grid_color())
         self.grid_column += 1
-        held = (self.cursor_behaviour & 1) and (
+        held = (self.cursor_behavior & 1) and (
             self.grid_row == self.grid_rows - 1)
         if self.grid_column >= self.grid_columns and not held:
             self.grid_column = 0
@@ -1172,19 +1198,19 @@ class FakeVdp:
             return False
         return True
 
-    def _gcol(self, mode, colour):
-        """Set a graphics colour and its paint mode, as VDU 18 does."""
+    def _gcol(self, mode, color):
+        """Set a graphics color and its paint mode, as VDU 18 does."""
         if mode > 7:
-            self.errors.append(f"VDU 18,{mode},{colour}")
+            self.errors.append(f"VDU 18,{mode},{color}")
             return
         with self.lock:
-            if colour < 64:
-                self.gfg, self.gfg_mode = colour % COLOUR_DEPTH, mode
-            elif 128 <= colour < 192:
-                self.gbg, self.gbg_mode = (colour - 128) % COLOUR_DEPTH, mode
+            if color < 64:
+                self.gfg, self.gfg_mode = color % COLOR_DEPTH, mode
+            elif 128 <= color < 192:
+                self.gbg, self.gbg_mode = (color - 128) % COLOR_DEPTH, mode
             else:
-                self.errors.append(f"VDU 18,{mode},{colour}")
-        self._event("gcol", (mode, colour))
+                self.errors.append(f"VDU 18,{mode},{color}")
+        self._event("gcol", (mode, color))
 
     def _graphics_viewport(self, left, top, right, bottom):
         """Set the graphics viewport, as VDU 24 does in pixel coordinates,
@@ -1212,13 +1238,13 @@ class FakeVdp:
             self.origin = origin
         self._event("origin", origin)
 
-    def _paint(self, column, row, colour, mode):
+    def _paint(self, column, row, color, mode):
         """Paint a pixel inside the graphics viewport.  Call with the lock
         held.
 
         @param column The screen X coordinate.
         @param row The screen Y coordinate.
-        @param colour The palette index.
+        @param color The palette index.
         @param mode The paint mode:  0 set, 1 OR, 2 AND, 3 XOR, 4 invert.
         """
         left, top, right, bottom = self.gviewport
@@ -1227,30 +1253,30 @@ class FakeVdp:
         index = row * SCREEN_WIDTH + column
         old = self.canvas[index]
         if mode == 0:
-            new = colour
+            new = color
         elif mode == 1:
-            new = old | colour
+            new = old | color
         elif mode == 2:
-            new = old & colour
+            new = old & color
         elif mode == 3:
-            new = old ^ colour
+            new = old ^ color
         elif mode == 4:
-            new = old ^ (COLOUR_DEPTH - 1)
+            new = old ^ (COLOR_DEPTH - 1)
         else:
             self.errors.append(f"paint mode {mode}")
             return
-        self.canvas[index] = new & (COLOUR_DEPTH - 1)
+        self.canvas[index] = new & (COLOR_DEPTH - 1)
         history = self.watched.get(index)
         if history is not None:
             history.append(self.canvas[index])
 
-    def _fill(self, rect, colour, mode):
+    def _fill(self, rect, color, mode):
         """Paint every pixel of an inclusive rectangle.  Call with the lock
         held."""
         left, top, right, bottom = rect
         for row in range(min(top, bottom), max(top, bottom) + 1):
             for column in range(min(left, right), max(left, right) + 1):
-                self._paint(column, row, colour, mode)
+                self._paint(column, row, color, mode)
 
     def _line_points(self, start, end):
         """Return the pixels of a line, both ends included, in order."""
@@ -1283,16 +1309,16 @@ class FakeVdp:
                 point_y += self.user_point[1]
             self._push_point(point_x, point_y)
             last, second, third = self.points
-            colour_mode = mode & 3
-            if colour_mode == 0:
+            color_mode = mode & 3
+            if color_mode == 0:
                 self.lock.notify_all()
                 return
-            if colour_mode == 1:
-                colour, paint = self.gfg, self.gfg_mode
-            elif colour_mode == 3:
-                colour, paint = self.gbg, self.gbg_mode
+            if color_mode == 1:
+                color, paint = self.gfg, self.gfg_mode
+            elif color_mode == 3:
+                color, paint = self.gbg, self.gbg_mode
             else:
-                colour, paint = 0, 4
+                color, paint = 0, 4
             if operation in (0x00, 0x08, 0x20, 0x28):
                 points = self._line_points(second, last)
                 if operation in (0x20, 0x28):
@@ -1300,18 +1326,18 @@ class FakeVdp:
                 if operation in (0x08, 0x28):
                     points = points[:-1]
                 for line_x, line_y in points:
-                    self._paint(line_x, line_y, colour, paint)
+                    self._paint(line_x, line_y, color, paint)
             elif operation == 0x40:
-                self._paint(last[0], last[1], colour, paint)
+                self._paint(last[0], last[1], color, paint)
             elif operation == 0x50:
-                self._triangle(third, second, last, colour, paint)
+                self._triangle(third, second, last, color, paint)
             elif operation == 0x60:
-                self._fill((second[0], second[1], last[0], last[1]), colour,
+                self._fill((second[0], second[1], last[0], last[1]), color,
                            paint)
             elif operation in (0x90, 0x98):
                 radius = ((last[0] - second[0]) ** 2
                           + (last[1] - second[1]) ** 2) ** 0.5
-                self._circle(second, radius, operation == 0x98, colour, paint)
+                self._circle(second, radius, operation == 0x98, color, paint)
             elif operation == 0xB8:
                 self._copy(mode, third, second, last)
             elif operation == 0xE8:
@@ -1321,7 +1347,7 @@ class FakeVdp:
             self.lock.notify_all()
         self._event("plot", (command, point_x, point_y))
 
-    def _triangle(self, first, second, third, colour, paint):
+    def _triangle(self, first, second, third, color, paint):
         """Fill start triangle, edges included.  Call with the lock held."""
         def side(start, end, point):
             return ((end[0] - start[0]) * (point[1] - start[1])
@@ -1335,19 +1361,19 @@ class FakeVdp:
                          side(third, first, (column, row)))
                 if (all(value >= 0 for value in sides)
                         or all(value <= 0 for value in sides)):
-                    self._paint(column, row, colour, paint)
+                    self._paint(column, row, color, paint)
 
-    def _circle(self, centre, radius, filled, colour, paint):
+    def _circle(self, center, radius, filled, color, paint):
         """Draw or fill a circle.  Call with the lock held."""
-        centre_x, centre_y = centre
+        center_x, center_y = center
         reach = int(radius) + 1
-        for row in range(centre_y - reach, centre_y + reach + 1):
-            for column in range(centre_x - reach, centre_x + reach + 1):
-                distance = ((column - centre_x) ** 2
-                            + (row - centre_y) ** 2) ** 0.5
+        for row in range(center_y - reach, center_y + reach + 1):
+            for column in range(center_x - reach, center_x + reach + 1):
+                distance = ((column - center_x) ** 2
+                            + (row - center_y) ** 2) ** 0.5
                 if (filled and distance <= radius) or (
                         not filled and abs(distance - radius) <= 0.5):
-                    self._paint(column, row, colour, paint)
+                    self._paint(column, row, color, paint)
 
     def _copy(self, mode, corner, other, destination):
         """Copy, or with mode 1 or 5 move, the rectangle between two corners
@@ -1367,23 +1393,23 @@ class FakeVdp:
         snapshot = bytes(self.canvas)
         for row in range(bottom - top + 1):
             for column in range(right - left + 1):
-                colour = snapshot[(top + row) * SCREEN_WIDTH + left + column]
-                self._paint(dest_x + column, dest_y + row, colour, 0)
+                color = snapshot[(top + row) * SCREEN_WIDTH + left + column]
+                self._paint(dest_x + column, dest_y + row, color, 0)
         if mode in (1, 5):
-            self.errors.append("PLOT move, whose clearing isn't modelled")
+            self.errors.append("PLOT move, whose clearing isn't modeled")
 
     def _palette_rgb(self, index):
         """Return the RGB of a palette index."""
         return self.palette.get(index, CGA_PALETTE[index])
 
     def _nearest_index(self, red, green, blue):
-        """Return the palette index of a 2-bit-per-channel colour:  the
+        """Return the palette index of a 2-bit-per-channel color:  the
         entry it is exactly, or the nearest by RGB distance."""
         cached = self.nearest.get((red, green, blue))
         if cached is not None:
             return cached
         best, best_distance = 0, None
-        for index in range(COLOUR_DEPTH):
+        for index in range(COLOR_DEPTH):
             entry = [channel >> 6 for channel in self._palette_rgb(index)]
             distance = ((entry[0] - red) ** 2 + (entry[1] - green) ** 2
                         + (entry[2] - blue) ** 2)
@@ -1440,7 +1466,7 @@ class FakeVdp:
         """Draw a glyph at the graphics cursor in the graphics font, its
         set pixels in the graphics foreground, and move the cursor right."""
         with self.lock:
-            if not self.cursor_behaviour & BEHAVIOUR_GRAPHICS_NO_WRAP:
+            if not self.cursor_behavior & BEHAVIOR_GRAPHICS_NO_WRAP:
                 self.errors.append("text at the graphics cursor can wrap")
             if self.graphics_font is None:
                 self.errors.append("text at the graphics cursor in the "
@@ -1539,10 +1565,10 @@ class FakeVdp:
 
     def grid_cells(self):
         """Return each row of the grid as (character, foreground,
-        background) per cell, the colours as palette indices."""
+        background) per cell, the colors as palette indices."""
         with self.lock:
-            return [[(ch, fg, bg) for ch, (fg, bg) in zip(row, colours)]
-                    for row, colours in zip(self.grid, self.grid_colours)]
+            return [[(ch, fg, bg) for ch, (fg, bg) in zip(row, colors)]
+                    for row, colors in zip(self.grid, self.grid_colors)]
 
     def glyph_table(self, font_id):
         """Map each distinct glyph of a font to a character code that draws
@@ -1569,7 +1595,7 @@ class FakeVdp:
         return table
 
     def read_cells(self, left, top, columns, rows, font_id):
-        """Read characters and colours back from the canvas by matching
+        """Read characters and colors back from the canvas by matching
         each cell of a rectangle against a font's glyphs.
 
         @param left The rectangle's left pixel.
@@ -1579,7 +1605,7 @@ class FakeVdp:
         @param font_id The ID of the font the cells were drawn in.
 
         @return A list of rows, each a list of (character, foreground,
-          background) per cell.  A cell of one colour is a space whose
+          background) per cell.  A cell of one color is a space whose
           foreground is None, and a cell no glyph matches has the character
           None.
         """
@@ -1608,12 +1634,12 @@ class FakeVdp:
 
         @return (character, foreground, background).
         """
-        colours = sorted({pixel for row in cell for pixel in row})
-        if len(colours) == 1:
-            return (" ", None, colours[0])
-        if len(colours) != 2:
+        colors = sorted({pixel for row in cell for pixel in row})
+        if len(colors) == 1:
+            return (" ", None, colors[0])
+        if len(colors) != 2:
             return (None, None, None)
-        for foreground, background in (colours, colours[::-1]):
+        for foreground, background in (colors, colors[::-1]):
             glyph = tuple(
                 sum(1 << (width - 1 - x) for x, pixel in enumerate(row)
                     if pixel == foreground)
@@ -1731,6 +1757,21 @@ class FakeVdp:
         self._send(conn, bytes([0x81, 0x04, ascii_value, 0, code, 1,
                             0x81, 0x04, ascii_value, 0, code, 0]))
 
+    def keys_at_once(self, text):
+        """Press and release the keys for characters in one write, so that the
+        driver reads them all at once.
+
+        @param text The characters.
+        """
+        packets = b""
+        for ch in text:
+            code = keycode(ch)
+            packets += bytes([0x81, 0x04, ord(ch), 0, code, 1,
+                              0x81, 0x04, ord(ch), 0, code, 0])
+        with self.lock:
+            conn = self.conn
+        self._send(conn, packets)
+
     def key_packet(self, ascii_value, modifiers, code, down=1):
         """Send one keyboard packet.
 
@@ -1745,15 +1786,17 @@ class FakeVdp:
                                 down]))
         time.sleep(0.01)
 
-    def press(self, code):
-        """Press and release a key that has no ASCII value.
+    def press(self, code, modifiers=0, ascii=0):
+        """Press and release a key, by default one that has no ASCII value.
 
         @param code The FabGL keycode of the key.
+        @param modifiers The modifier bits held with it.
+        @param ascii The ASCII value it sends.
         """
         with self.lock:
             conn = self.conn
-        self._send(conn, bytes([0x81, 0x04, 0, 0, code, 1,
-                            0x81, 0x04, 0, 0, code, 0]))
+        self._send(conn, bytes([0x81, 0x04, ascii, modifiers, code, 1,
+                            0x81, 0x04, ascii, modifiers, code, 0]))
         time.sleep(0.01)
 
     def ctrl(self, ch):
@@ -1769,6 +1812,27 @@ class FakeVdp:
             modifiers = self._modifiers() | KEYMOD_CTRL
         self._send(conn, bytes([0x81, 0x04, control, modifiers, code, 1,
                                 0x81, 0x04, control, modifiers, code, 0]))
+
+    def alt(self, ch=None, right=False):
+        """Press an Alt, press and release a letter with it if one is given,
+        and release the Alt.
+
+        @param ch The letter, in lower case, or None for Alt on its own.
+        @param right Whether it is the right Alt (AltGr) rather than the left.
+        """
+        alt_key = KEYCODE_RALT if right else KEYCODE_LALT
+        with self.lock:
+            conn = self.conn
+            modifiers = self._modifiers() | (
+                KEYMOD_ALT_RIGHT if right else KEYMOD_ALT_LEFT)
+        data = bytes([0x81, 0x04, 0, modifiers, alt_key, 1])
+        if ch is not None:
+            code = keycode(ch)
+            data += bytes([0x81, 0x04, ord(ch), modifiers, code, 1,
+                           0x81, 0x04, ord(ch), modifiers, code, 0])
+        data += bytes([0x81, 0x04, 0, self._modifiers(), alt_key, 0])
+        self._send(conn, data)
+        time.sleep(0.01)
 
     def release_display(self):
         """Press and release Ctrl+Alt+Backspace, which takes the display back

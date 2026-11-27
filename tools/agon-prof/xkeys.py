@@ -67,7 +67,8 @@ class XKeyEvent(ctypes.Structure):
 
 
 KEY_PRESS, KEY_RELEASE = 2, 3
-MODIFIER_STATES = {"Shift_L": 1, "Control_L": 4, "Alt_L": 8}
+MODIFIER_STATES = {"Shift_L": 1, "Shift_R": 1, "Control_L": 4,
+                   "Control_R": 4, "Alt_L": 8, "Alt_R": 8}
 display = x11.XOpenDisplay(None)
 window = int(sys.argv[1], 0)
 root = x11.XDefaultRootWindow(display)

@@ -42,7 +42,7 @@ COPY_RECT, SCROLL_RECT = 17, 18
 # GfxBlendMode values.
 BLEND_OPAQUE, BLEND_AND, BLEND_OR, BLEND_XOR, BLEND_INVERT = range(5)
 
-# The CGA colours as GfxColor values, in palette order.
+# The CGA colors as GfxColor values, in palette order.
 CGA_COLORS = [0x000000FF, 0x0000AAFF, 0x00AA00FF, 0x00AAAAFF, 0xAA0000FF,
               0xAA00AAFF, 0xAA5500FF, 0xAAAAAAFF, 0x555555FF, 0x5555FFFF,
               0x55FF55FF, 0x55FFFFFF, 0xFF5555FF, 0xFF55FFFF, 0xFFFF55FF,
@@ -74,12 +74,12 @@ def pop_scissor():
 
 
 def fg(index):
-    """A SET_FG_COLOR record of a CGA colour, by palette index."""
+    """A SET_FG_COLOR record of a CGA color, by palette index."""
     return bytes([SET_FG_COLOR]) + struct.pack("<I", CGA_COLORS[index])
 
 
 def bg(index):
-    """A SET_BG_COLOR record of a CGA colour, by palette index."""
+    """A SET_BG_COLOR record of a CGA color, by palette index."""
     return bytes([SET_BG_COLOR]) + struct.pack("<I", CGA_COLORS[index])
 
 
@@ -108,8 +108,8 @@ def triangle(first, second, third, filled=True):
         [int(filled)])
 
 
-def circle(centre_x, centre_y, radius, filled=True):
-    return shorts(DRAW_CIRCLE, centre_x, centre_y, radius) + bytes(
+def circle(center_x, center_y, radius, filled=True):
+    return shorts(DRAW_CIRCLE, center_x, center_y, radius) + bytes(
         [int(filled)])
 
 
