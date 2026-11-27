@@ -347,6 +347,11 @@ typedef struct WinWindowArgs {
 /// @brief A WIN_MSG_SET_WINDOW change:  the frame.
 #define WIN_SET_FRAME 0x04
 
+/// @def WIN_SET_FACE
+///
+/// @brief A WIN_MSG_SET_WINDOW change:  the color of the body.
+#define WIN_SET_FACE 0x08
+
 /// @struct WinSetWindowArgs
 ///
 /// @brief Arguments and return values for WIN_MSG_SET_WINDOW.
@@ -357,6 +362,7 @@ typedef struct WinWindowArgs {
 /// @param state In:  the WinState, with WIN_SET_STATE.
 /// @param titleLength In:  the bytes at title, with WIN_SET_TITLE.
 /// @param frame In:  the new frame, with WIN_SET_FRAME.
+/// @param face In:  the new color of the body, with WIN_SET_FACE.
 /// @param title In:  the new title, with WIN_SET_TITLE.
 typedef struct WinSetWindowArgs {
   uint8_t     status;
@@ -365,6 +371,7 @@ typedef struct WinSetWindowArgs {
   uint8_t     state;
   uint8_t     titleLength;
   GfxRect     frame;
+  GfxColor    face;
   const char *title;
 } WinSetWindowArgs;
 
@@ -406,6 +413,9 @@ typedef struct WinWidgetArgs {
 /// @param WIN_PROP_HIDDEN value:  0 or 1.
 /// @param WIN_PROP_FOCUS No value:  give the widget the focus.
 /// @param WIN_PROP_RECT rect:  the widget's place in the body.
+/// @param WIN_PROP_MENU_ITEM value:  a menu bar item's identifier in the
+///   high byte and its WIN_MENU_DISABLED and WIN_MENU_CHECKED bits in the
+///   low byte.
 typedef enum WinProperty {
   WIN_PROP_TEXT = 0,
   WIN_PROP_VALUE,
@@ -414,6 +424,7 @@ typedef enum WinProperty {
   WIN_PROP_HIDDEN,
   WIN_PROP_FOCUS,
   WIN_PROP_RECT,
+  WIN_PROP_MENU_ITEM,
 } WinProperty;
 
 /// @struct WinSetWidgetArgs
@@ -646,7 +657,10 @@ typedef struct WinTaskWindowArgs {
 /// @param WIN_EVENT_STATE detail:  the new WinState.
 /// @param WIN_EVENT_FOCUS detail:  1 activated, 0 deactivated.
 /// @param WIN_EVENT_COMMAND widget, value.
-/// @param WIN_EVENT_CHANGED widget, value.
+/// @param WIN_EVENT_CHANGED widget, value:  a list's new selection, or a text
+///   field's text's length, sent once the field has gone unchanged for a
+///   quarter of a second, or sooner, before anything else the user does to
+///   the window is sent.
 /// @param WIN_EVENT_KEY key, ascii, modifiers, and detail:  1 down.
 /// @param WIN_EVENT_POINTER widget, x, y, buttons, and detail:  the wheel.
 /// @param WIN_EVENT_SESSION_ENDED widget:  the text grid.
@@ -751,6 +765,9 @@ typedef struct WinEventsArgs {
 ///   WIN_MSG_SET_CANVAS.
 /// @param WIN_WIDGET_TEXT_GRID No fields; its rows and columns come from its
 ///   size.
+/// @param WIN_WIDGET_MENU_BAR uint16 size, then menus:  each a title text
+///   (an '&' before its marked letter), a count byte and that many items,
+///   each an identifier, WIN_MENU_* bits, a text and a shortcut text.
 /// @param WIN_WIDGET_COUNT The number of widget kinds.
 typedef enum WinWidgetKind {
   WIN_WIDGET_LABEL = 0,
@@ -763,6 +780,7 @@ typedef enum WinWidgetKind {
   WIN_WIDGET_GROUP,
   WIN_WIDGET_CANVAS,
   WIN_WIDGET_TEXT_GRID,
+  WIN_WIDGET_MENU_BAR,
   WIN_WIDGET_COUNT
 } WinWidgetKind;
 
@@ -872,6 +890,46 @@ GFX_STATIC_ASSERT(WIN_RECORD_RECT + 4 * sizeof(int16_t)
 /// @brief The most widgets one window holds.
 #define WIN_MAX_WIDGETS 32
 
+/// @def WIN_CANVAS_MAX
+///
+/// @brief The most bytes of records one canvas holds.
+#define WIN_CANVAS_MAX 4096
+
+/// @def WIN_MENU_BAR_MAX
+///
+/// @brief The most bytes of a menu bar's menus.
+#define WIN_MENU_BAR_MAX 1024
+
+/// @def WIN_MAX_MENUS
+///
+/// @brief The most menus one menu bar holds.
+#define WIN_MAX_MENUS 8
+
+/// @def WIN_MAX_MENU_ITEMS
+///
+/// @brief The most items one menu holds.
+#define WIN_MAX_MENU_ITEMS 16
+
+/// @def WIN_MENU_DISABLED
+///
+/// @brief A menu item bit:  it can't be chosen and is drawn dark gray.
+#define WIN_MENU_DISABLED  0x01
+
+/// @def WIN_MENU_CHECKED
+///
+/// @brief A menu item bit:  it is drawn with a check mark.
+#define WIN_MENU_CHECKED   0x02
+
+/// @def WIN_MENU_SEPARATOR
+///
+/// @brief A menu item bit:  it is a line between items, with no text.
+#define WIN_MENU_SEPARATOR 0x04
+
+/// @def WIN_NO_ITEM
+///
+/// @brief A list's selection when no item is selected.
+#define WIN_NO_ITEM 0xFFFF
+
 /// @def WIN_LIST_ITEMS_MAX
 ///
 /// @brief The most bytes of items one list holds.
@@ -882,7 +940,7 @@ GFX_STATIC_ASSERT(WIN_RECORD_RECT + 4 * sizeof(int16_t)
 /// @brief The tag of each text grid operation in a WIN_MSG_GRID_WRITE,
 /// followed by its fields.
 ///
-/// @note An attribute is a foreground ANSI colour index in its low 4 bits and a
+/// @note An attribute is a foreground ANSI color index in its low 4 bits and a
 /// background one in its high 4 bits.
 ///
 /// @param WIN_GRID_PUT row, column, attribute, length, and length bytes.
@@ -911,47 +969,47 @@ typedef enum WinGridOperation {
 
 /// @def WIN_ANSI_NUM_COLORS
 ///
-/// @brief The number of ANSI colour indexes a text grid attribute uses.
+/// @brief The number of ANSI color indexes a text grid attribute uses.
 #define WIN_ANSI_NUM_COLORS 16
 
 /// @def WIN_ANSI_BLACK
 ///
-/// @brief The ANSI colour index of black.
+/// @brief The ANSI color index of black.
 #define WIN_ANSI_BLACK 0
 
 /// @def WIN_ANSI_BRIGHT_WHITE
 ///
-/// @brief The ANSI colour index of bright white.
+/// @brief The ANSI color index of bright white.
 #define WIN_ANSI_BRIGHT_WHITE 15
 
 /// @def WIN_ATTRIBUTE_SHIFT
 ///
-/// @brief How far a text grid attribute's background colour index is
+/// @brief How far a text grid attribute's background color index is
 /// shifted left.
 #define WIN_ATTRIBUTE_SHIFT 4
 
 /// @def WIN_ATTRIBUTE_FOREGROUND_MASK
 ///
-/// @brief The bits of a text grid attribute that are its foreground colour
+/// @brief The bits of a text grid attribute that are its foreground color
 /// index.
 #define WIN_ATTRIBUTE_FOREGROUND_MASK 0x0F
 
 /// @def WIN_ATTRIBUTE(foreground, background)
 ///
-/// @brief The text grid attribute of a foreground and a background colour
+/// @brief The text grid attribute of a foreground and a background color
 /// index.
 #define WIN_ATTRIBUTE(foreground, background) \
   ((uint8_t) (((background) << WIN_ATTRIBUTE_SHIFT) | (foreground)))
 
 /// @def WIN_ATTRIBUTE_FOREGROUND(attribute)
 ///
-/// @brief The foreground colour index of a text grid attribute.
+/// @brief The foreground color index of a text grid attribute.
 #define WIN_ATTRIBUTE_FOREGROUND(attribute) \
   ((attribute) & WIN_ATTRIBUTE_FOREGROUND_MASK)
 
 /// @def WIN_ATTRIBUTE_BACKGROUND(attribute)
 ///
-/// @brief The background colour index of a text grid attribute.
+/// @brief The background color index of a text grid attribute.
 #define WIN_ATTRIBUTE_BACKGROUND(attribute) \
   ((attribute) >> WIN_ATTRIBUTE_SHIFT)
 
