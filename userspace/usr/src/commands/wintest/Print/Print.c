@@ -101,6 +101,13 @@ static bool printEvent(const WinEvent *event) {
     printf("RESIZED %u %dx%d\n", window, event->x, event->y);
   } else if (event->type == WIN_EVENT_SESSION_ENDED) {
     printf("SESSION_ENDED %u\n", window);
+  } else if (event->type == WIN_EVENT_COMMAND) {
+    printf("COMMAND %u %u %u\n", window, event->widget, event->value);
+  } else if (event->type == WIN_EVENT_CHANGED) {
+    printf("CHANGED %u %u %u\n", window, event->widget, event->value);
+  } else if (event->type == WIN_EVENT_POINTER) {
+    printf("POINTER %u %u %d,%d %u\n", window, event->widget, event->x,
+      event->y, (unsigned int) event->buttons);
   } else if (event->type == WIN_EVENT_KEY) {
     printKey(event);
   } else if (event->type == WIN_EVENT_OVERFLOW) {

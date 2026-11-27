@@ -57,6 +57,32 @@ static const char *const _layerNames[] = {
 /// @brief The start of create's option that lists the window's flags.
 #define WINTEST_OPTION_FLAGS "flags="
 
+/// @struct WintestCommands
+///
+/// @brief An overlay that carries out some of wintest's commands, and the
+/// function that does.
+///
+/// @param overlay The overlay's name.
+/// @param function The function's name.
+typedef struct WintestCommands {
+  const char *overlay;
+  const char *function;
+} WintestCommands;
+
+/// @var _commands
+///
+/// @brief The overlays a command that isn't the script's own is offered to,
+/// in turn, each from here, so that only one of them is on the stack at a
+/// time.
+static const WintestCommands _commands[] = {
+  { "Grid", "wintestGrid" },
+  { "Write", "wintestWrite" },
+  { "Widget", "wintestWidget" },
+  { "Draw", "wintestDraw" },
+  { "Change", "wintestChange" },
+  { "Query", "wintestQuery" },
+};
+
 /// @fn static int nameIndex(const char *name, const char *const *names,
 ///   int count)
 ///
@@ -216,6 +242,7 @@ static int run(Wintest *wintest) {
         print(wintest, command, NULL, window);
       } else {
         printf("wintest: window %d\n", window);
+        wintest->last = (uint8_t) window;
       }
     } else if ((strcmp(command, "title") == 0) && (ii + 1 < argc)) {
       int rc = winSetTitle(session, (uint8_t) strtol(first, NULL, 10),
@@ -261,8 +288,13 @@ static int run(Wintest *wintest) {
       return 0;
     } else {
       wintest->index = ii - 1;
-      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Grid", "wintestGrid",
-        wintest);
+      wintest->handled = false;
+      for (size_t jj = 0; !wintest->handled && (jj < WINTEST_COUNT(_commands));
+        jj++
+      ) {
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, _commands[jj].overlay,
+          _commands[jj].function, wintest);
+      }
       if (!wintest->handled) {
         fputs("wintest: bad command\n", stderr);
         return 1;

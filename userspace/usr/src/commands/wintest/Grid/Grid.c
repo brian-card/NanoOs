@@ -91,8 +91,7 @@ static int createGrid(Wintest *wintest, const char *at, const char *size,
 ///
 /// @brief Carry out the text grid command at the context's index, and move
 /// the index past its arguments:  grid X,Y COLSxROWS [session|twice] here,
-/// inject
-/// in the Inject overlay, and the others in the Write overlay.
+/// and inject in the Inject overlay.
 ///
 /// @param args A pointer to the Wintest.
 ///
@@ -111,6 +110,7 @@ void* wintestGrid(void *args) {
       wintest->argv[ii + 2], kind);
     if (rc >= 0) {
       printf("wintest: window %d\n", rc);
+      wintest->last = (uint8_t) rc;
     } else {
       printf("wintest: grid: %s\n", strerror(-rc));
     }
@@ -120,8 +120,7 @@ void* wintestGrid(void *args) {
       wintest);
     wintest->index = ii + 1;
   } else {
-    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Write", "wintestWrite",
-      wintest);
+    wintest->handled = false;
   }
   return args;
 }

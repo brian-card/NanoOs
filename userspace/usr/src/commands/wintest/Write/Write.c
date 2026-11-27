@@ -124,8 +124,8 @@ void* wintestWrite(void *args) {
   long values[WINTEST_MAX_GRID_FIELDS];
   int count = 0;
   int rc = 0;
-  wintest->handled = (second != NULL);
-  if (!wintest->handled) {
+  wintest->handled = false;
+  if (second == NULL) {
     return args;
   } else if ((strcmp(command, "put") == 0) && (ii + 2 < argc)
     && parseNumbers(second, values,
@@ -172,9 +172,9 @@ void* wintestWrite(void *args) {
   } else if (strcmp(command, "burst") == 0) {
     rc = burst(wintest, first, (int) strtol(second, NULL, 10));
   } else {
-    wintest->handled = false;
     return args;
   }
+  wintest->handled = true;
   for (int jj = 0; jj < count; jj++) {
     operation[WIN_GRID_TAG + 1 + jj] = (uint8_t) values[jj];
   }
