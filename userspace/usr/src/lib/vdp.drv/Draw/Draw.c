@@ -661,7 +661,7 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
       return GFX_OK;
     }
     vdpPlot(walk, VDP_PLOT_MOVE, firstX, firstY);
-    // The radius is relative to the centre, so the origin isn't added.
+    // The radius is relative to the center, so the origin isn't added.
     vdpPlot(walk, (params[6] != 0) ? VDP_PLOT_DISC : VDP_PLOT_CIRCLE,
       words[2], 0);
   } else if (tag == GFX_CMD_DRAW_IMAGE) {

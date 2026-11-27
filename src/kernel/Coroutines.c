@@ -210,7 +210,7 @@ static ComutexUnlockCallback _globalComutexUnlockCallback = NULL;
 
 /// @var static CoconditionSignalCallback _globalCoconditionSignalCallback
 ///
-/// @brief Global callback to call when a cocondition is signalled.
+/// @brief Global callback to call when a cocondition is signaled.
 static CoconditionSignalCallback _globalCoconditionSignalCallback = NULL;
 
 /// @var _globalPreemptionCallback
@@ -379,12 +379,12 @@ ZEROINIT(static tss_t _tssCoroutineYieldCallback);
 
 /// @var static tss_t _tssComutexUnlockCallback
 ///
-/// @brief Thread-specific callback to call when a cocondition is signalled.
+/// @brief Thread-specific callback to call when a cocondition is signaled.
 ZEROINIT(static tss_t _tssComutexUnlockCallback);
 
 /// @var static tss_t _tssCoconditionSignalCallback
 ///
-/// @brief Thread-specific callback to call when a cocondition is signalled.
+/// @brief Thread-specific callback to call when a cocondition is signaled.
 ZEROINIT(static tss_t _tssCoconditionSignalCallback);
 
 /// @var static tss_t _tssPreemptionCallback
@@ -1165,7 +1165,7 @@ int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg) {
 /// ensure it remains non-NULL. Then we immediately suspend ourself waiting for
 /// the first function we are to run. (The head of the running list is the
 /// coroutine that forked us.) We pass the stack pointer to prevent it from
-/// being optimised away. The first time we are called we will return to the
+/// being optimized away. The first time we are called we will return to the
 /// fork in the coroutineInit() constructor function (above); on subsequent
 /// calls we will resume the parent coroutineMain(). In both cases the passed
 /// value is lost when coroutinePass() longjmp()s to the forking setjmp().
@@ -2354,7 +2354,7 @@ int coconditionInit(Cocondition* cond) {
 ///
 /// @param cond A pointer to the coroutine condition to signal.
 ///
-/// @return Returns coroutineSuccess on successful signalling, coroutineError
+/// @return Returns coroutineSuccess on successful signaling, coroutineError
 /// if the call could not be honored (cond is NULL).
 int coconditionSignal(Cocondition *cond) {
   int returnValue = coroutineSuccess;
@@ -2394,7 +2394,7 @@ int coconditionSignal(Cocondition *cond) {
 
 /// @fn int coconditionTimedWait(Cocondition* cond, Comutex* mtx, const struct timespec* ts)
 ///
-/// @brief Wait for a condition to be signalled or until a specified time,
+/// @brief Wait for a condition to be signaled or until a specified time,
 /// whichever comes first.
 ///
 /// @param cond A pointer to the condition to wait on.
@@ -2404,7 +2404,7 @@ int coconditionSignal(Cocondition *cond) {
 /// @param ts A struct timespec that specifies the future deadline of the wait.
 ///
 /// @return Returns coroutineSuccess on success, coroutineTimedout if the
-/// deadline is reached before the condition is signalled, or coroutineError
+/// deadline is reached before the condition is signaled, or coroutineError
 /// if the request could not be honored (a parameter is NULL or timespec_get
 /// fails).
 int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
@@ -2516,7 +2516,7 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
 
 /// @fn int coconditionWait(Cocondition* cond, Comutex* mtx)
 ///
-/// @brief Wait for the specified condition to be signalled.
+/// @brief Wait for the specified condition to be signaled.
 ///
 /// @param cond A pointer to the condition to wait on.
 /// @param mtx A mutex for the condition that must be locked before this call

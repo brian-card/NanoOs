@@ -51,7 +51,7 @@
 /// @param mode   The null-terminated mode string.
 /// @param flags  [out] Populated with the parsed flags.
 ///
-/// @return FAT32_SUCCESS on a recognised mode, FAT32_INVALID_PARAMETER
+/// @return FAT32_SUCCESS on a recognized mode, FAT32_INVALID_PARAMETER
 ///         otherwise.
 ///
 int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {

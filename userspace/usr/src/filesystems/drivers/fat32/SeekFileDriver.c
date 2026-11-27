@@ -69,7 +69,7 @@
 /// @param whence       One of SEEK_SET, SEEK_CUR, or SEEK_END.
 ///
 /// @return The new position on success; -EINVAL if an argument is NULL,
-///         whence is unrecognised, or the computed position is out of range;
+///         whence is unrecognized, or the computed position is out of range;
 ///         or -EIO on an I/O failure while walking the cluster chain, in which
 ///         case the position is unchanged.
 ///
@@ -107,7 +107,7 @@ long driverFseek(
 
   uint32_t pos = (uint32_t) newPosition;
 
-  // ---- Synchronise currentCluster with the new position ----
+  // ---- Synchronize currentCluster with the new position ----
   //
   // If the file has no clusters (empty and never written to) or the new
   // position is zero, reset to firstCluster — no chain walk needed.

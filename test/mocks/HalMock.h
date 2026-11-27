@@ -216,7 +216,7 @@ bool mockTimerArmed(int32_t deviceId);
 
 /// @fn unsigned int mockTimerCancelCount(void)
 ///
-/// @brief Get the number of times any timer has been cancelled since boot.
+/// @brief Get the number of times any timer has been canceled since boot.
 unsigned int mockTimerCancelCount(void);
 
 /// @fn unsigned int mockPendingCallbackDispatchCount(void)

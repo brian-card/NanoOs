@@ -186,8 +186,8 @@ ProcessId schedulerPid = 0;
 /// @var schedulerPreemptionTimerArmed
 ///
 /// @brief Whether the scheduler has armed the preemption timer and nothing has
-/// cancelled it since.  Set before the timer is armed and cleared after it is
-/// cancelled, so that the timer is never armed while this is false and the
+/// canceled it since.  Set before the timer is armed and cleared after it is
+/// canceled, so that the timer is never armed while this is false and the
 /// switches to processes that are never preempted make no HAL call.
 bool schedulerPreemptionTimerArmed = false;
 
@@ -6852,7 +6852,7 @@ void checkForTimeouts(SchedulerState *schedulerState) {
 ///
 /// @brief Queue a process that has yielded to wait:  on its waiting or timed
 /// waiting queue, or on its ready queue if what it waits for has already
-/// happened.  That happens when a condition is signalled or a mutex unlocked
+/// happened.  That happens when a condition is signaled or a mutex unlocked
 /// while the process is in no queue, where signalCallback and unlockCallback
 /// leave it.
 ///

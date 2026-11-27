@@ -49,7 +49,7 @@ typedef enum TermEscape {
 
 /// @def TERM_UNCHANGED
 ///
-/// @brief A TermParser colour that the sequence being read doesn't set.
+/// @brief A TermParser color that the sequence being read doesn't set.
 #define TERM_UNCHANGED 0xFF
 
 /// @def TERM_RESIZE_REPORT_MODE
@@ -185,7 +185,7 @@ static uint8_t cursorIndex(uint8_t parameter, uint8_t limit) {
 /// @fn static void endParameter(TermParser *parser)
 ///
 /// @brief Finish reading a control sequence parameter, applying it to the
-/// colours the sequence selects as a Select Graphic Rendition parameter, as
+/// colors the sequence selects as a Select Graphic Rendition parameter, as
 /// vdp.drv's vdpEndParameter does.
 ///
 /// @param parser The parser.
@@ -231,7 +231,7 @@ static void endParameter(TermParser *parser) {
 
 /// @fn static void finishSequence(Term *term, uint8_t c)
 ///
-/// @brief Carry out a control sequence that has ended:  set colours, clear
+/// @brief Carry out a control sequence that has ended:  set colors, clear
 /// the grid, move the cursor, erase to the end of the line, or insert or
 /// delete rows.  Every other sequence does nothing.
 ///

@@ -79,7 +79,7 @@ static int countInQueue(ProcessQueue *processQueue,
 
 /// @fn static void signalOnly(ProcessDescriptor *processDescriptor)
 ///
-/// @brief Run signalCallback for a condition whose only signalled waiter is a
+/// @brief Run signalCallback for a condition whose only signaled waiter is a
 /// process.
 ///
 /// @param processDescriptor A pointer to the waiting process.
@@ -159,7 +159,7 @@ static void readyAgain(ProcessDescriptor *target) {
   processQueuePush(target->readyQueue, target);
 }
 
-NANO_OS_KERNEL_TEST(wake, waiter_signalled_while_popped_is_queued_ready) {
+NANO_OS_KERNEL_TEST(wake, waiter_signaled_while_popped_is_queued_ready) {
   ProcessDescriptor *target = startPoppedWaiter(COROUTINE_STATE_WAIT);
   NANO_OS_ASSERT_NOT_NULL(target);
   Cocondition cocondition;
@@ -180,7 +180,7 @@ NANO_OS_KERNEL_TEST(wake, waiter_signalled_while_popped_is_queued_ready) {
   readyAgain(target);
 }
 
-NANO_OS_KERNEL_TEST(wake, later_waiter_is_queued_ready_only_when_signalled) {
+NANO_OS_KERNEL_TEST(wake, later_waiter_is_queued_ready_only_when_signaled) {
   ProcessDescriptor *target = startPoppedWaiter(COROUTINE_STATE_WAIT);
   NANO_OS_ASSERT_NOT_NULL(target);
   Coroutine first;
@@ -206,7 +206,7 @@ NANO_OS_KERNEL_TEST(wake, later_waiter_is_queued_ready_only_when_signalled) {
   readyAgain(target);
 }
 
-NANO_OS_KERNEL_TEST(wake, unsignalled_waiters_are_queued_to_wait) {
+NANO_OS_KERNEL_TEST(wake, unsignaled_waiters_are_queued_to_wait) {
   ProcessDescriptor *target = startPoppedWaiter(COROUTINE_STATE_WAIT);
   NANO_OS_ASSERT_NOT_NULL(target);
   Cocondition cocondition;

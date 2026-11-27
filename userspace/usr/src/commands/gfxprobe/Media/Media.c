@@ -45,7 +45,7 @@ CGA_COLOR_PALETTE
 ///
 /// @brief Upload an image whose format, width, height and pixels are given
 /// as "rgba8888", "rgba2222" or "rgb888", two numbers, and a file of pixels,
-/// "-" for none, or "pattern" for RGBA8888 pixels whose colour at (x, y) is
+/// "-" for none, or "pattern" for RGBA8888 pixels whose color at (x, y) is
 /// CGA color (x + y) % 16.
 ///
 /// @param disp The display.

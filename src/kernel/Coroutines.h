@@ -155,7 +155,7 @@ typedef void (*CoroutinePreemptionCallback)(void *stateData);
 /// @typedef CoconditionSignalCallback
 ///
 /// @brief Function signature that can be used as a callback when a cocondition
-/// is signalled.
+/// is signaled.
 typedef void (*CoconditionSignalCallback)(void *stateData,
   Cocondition *cocondition);
 
@@ -201,7 +201,7 @@ typedef union CoroutineFuncData {
 /// @param blockingComutex A pointer to the mutex (Comutex) that the coroutine
 ///   is currently waiting to lock.
 /// @param blockingCocondition A pointer to a condition (Cocondition) that the
-///   coroutine is currently waiting on to be signalled.
+///   coroutine is currently waiting on to be signaled.
 /// @param stackEnd A pointer to a uint64_t that marks the end of the stack
 ///   for this coroutine.
 /// @param criticalSectionDepth The number of times times the coroutine has

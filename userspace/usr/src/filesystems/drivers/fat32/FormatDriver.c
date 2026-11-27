@@ -430,7 +430,7 @@ int driverFormat(
   //
   // Walk every sector of the FAT region.  For most sectors the content is
   // all-zero (free clusters).  The first sector of FAT1 (and its mirror in
-  // FAT2) must be initialised with:
+  // FAT2) must be initialized with:
   //
   //   Entry 0: 0x0FFFFF??  (media byte in low byte, 0xFFFFF? in high)
   //   Entry 1: 0x0FFFFFFF  (end-of-chain)
@@ -445,7 +445,7 @@ int driverFormat(
       memset(filesystemState->blockBuffer, 0, bytesPerSector);
 
       if (sector == 0) {
-        // Initialise the three reserved entries in the first FAT sector.
+        // Initialize the three reserved entries in the first FAT sector.
         uint32_t entry0 = 0x0FFFFF00UL | 0xF8UL;  // Media byte
         uint32_t entry1 = FAT32_CLUSTER_EOC;
         uint32_t entry2 = FAT32_CLUSTER_EOC;       // Root directory
