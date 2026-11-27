@@ -57,10 +57,12 @@ static uint8_t wmTitleAt(WmState *state, const WmWidget *bar,
   for (uint8_t ii = 0; ii < bar->numItems; ii++) {
     GfxRect rect;
     wmTitleRect(state, bar, barRect, ii, &rect);
+
     if (wmContains(&rect, pointX, pointY)) {
       return ii;
     }
   }
+
   return WM_NO_WIDGET;
 }
 
@@ -98,30 +100,39 @@ static void wmDropdownRect(WmState *state, const WmWidget *bar,
   uint8_t text = 0;
   uint8_t shortcut = 0;
   int16_t height = 2;
+
   for (uint8_t ii = 0; ii < count; ii++) {
     const uint8_t *item = wmMenuItem(menu, ii);
     const uint8_t *keys = wmSkipText(&item[2]);
+
     if (item[2] > text) {
       text = item[2];
     }
+
     if (*keys > shortcut) {
       shortcut = *keys;
     }
+
     height += wmItemHeight(item);
   }
-  int16_t width = 2 + WM_CHECK_GUTTER + text * glyphW + WM_ITEM_PAD;
+
+  int16_t width = 2 + WM_CHECK_GUTTER + (text * glyphW) + WM_ITEM_PAD;
+
   if (shortcut > 0) {
-    width += WM_SHORTCUT_GAP + shortcut * glyphW;
+    width += WM_SHORTCUT_GAP + (shortcut * glyphW);
   }
+
   wmTitleRect(state, bar, barRect, index, rect);
   rect->y = barRect->y + barRect->h;
   rect->w = width;
   rect->h = height;
-  if (rect->x + width > (int16_t) state->display.width) {
-    rect->x = (int16_t) state->display.width - width;
+
+  if ((rect->x + width) > ((int16_t) state->display.width)) {
+    rect->x = ((int16_t) state->display.width) - width;
   }
-  if (rect->y + height > (int16_t) state->display.height) {
-    rect->y = (int16_t) state->display.height - height;
+
+  if ((rect->y + height) > ((int16_t) state->display.height)) {
+    rect->y = ((int16_t) state->display.height) - height;
   }
 }
 
@@ -140,13 +151,16 @@ static uint8_t wmItemAt(const WmMenuState *open, uint8_t *menu,
 ) {
   int16_t top = open->rect.y + 1;
   uint8_t count = *wmSkipText(menu);
+
   for (uint8_t ii = 0; ii < count; ii++) {
     int16_t height = wmItemHeight(wmMenuItem(menu, ii));
-    if ((pointY >= top) && (pointY < top + height)) {
+    if ((pointY >= top) && (pointY < (top + height))) {
       return ii;
     }
+
     top += height;
   }
+
   return WM_NO_WIDGET;
 }
 
@@ -164,8 +178,10 @@ static uint8_t wmItemAt(const WmMenuState *open, uint8_t *menu,
 static uint8_t wmNextUsable(uint8_t *menu, uint8_t from, int8_t step) {
   int16_t count = *wmSkipText(menu);
   int16_t at = (from == WM_NO_WIDGET) ? ((step > 0) ? -1 : count) : from;
+
   for (int16_t tries = 0; tries < count; tries++) {
     at += step;
+
     if (at < 0) {
       at = count - 1;
     } else if (at >= count) {
@@ -175,6 +191,7 @@ static uint8_t wmNextUsable(uint8_t *menu, uint8_t from, int8_t step) {
       return (uint8_t) at;
     }
   }
+
   return WM_NO_WIDGET;
 }
 
@@ -189,13 +206,16 @@ static uint8_t wmNextUsable(uint8_t *menu, uint8_t from, int8_t step) {
 static void wmClose(WmState *state) {
   WmMenuState *open = &state->menu;
   WmWindow *window = wmFind(state, open->window);
+
   wmDamage(state, &open->rect);
+
   if ((window != NULL) && (window->widgets != NULL)
     && (open->bar < ((WmWidgets*) window->widgets)->count)
   ) {
     wmDamageWidget(state, window,
       &((WmWidgets*) window->widgets)->widget[open->bar]);
   }
+
   open->open = false;
   state->grab = WM_GRAB_NONE;
   state->grabbed = 0;
@@ -214,9 +234,11 @@ static void wmOpen(WmWidgetJob *job, uint8_t index) {
   WmState *state = job->state;
   WmMenuState *open = &state->menu;
   WmWidgets *widgets = (WmWidgets*) job->window->widgets;
+
   if (open->open) {
     wmClose(state);
   }
+
   open->open = true;
   open->window = job->window->id;
   open->bar = (uint8_t) (job->widget - widgets->widget);
@@ -243,11 +265,14 @@ static void wmDamageItem(WmState *state, uint8_t *menu, uint8_t item) {
   if (item == WM_NO_WIDGET) {
     return;
   }
+
   GfxRect rect = state->menu.rect;
   rect.y++;
+
   for (uint8_t ii = 0; ii < item; ii++) {
     rect.y += wmItemHeight(wmMenuItem(menu, ii));
   }
+
   rect.h = wmItemHeight(wmMenuItem(menu, item));
   wmDamage(state, &rect);
 }
@@ -285,8 +310,10 @@ static void wmChoose(WmWidgetJob *job) {
   if (state->menu.item == WM_NO_WIDGET) {
     return;
   }
+
   const uint8_t *item = wmMenuItem(wmMenu(job->widget, state->menu.menu),
     state->menu.item);
+
   wmClose(state);
   wmReleaseChanged(state);
   WinEvent *event = wmSend(state, job->window->owner, WIN_EVENT_COMMAND,
@@ -313,22 +340,28 @@ static void wmMenuPointer(WmWidgetJob *job) {
   WmMenuState *open = &state->menu;
   const GfxEvent *event = job->event;
   bool down = (event->buttons & GFX_BUTTON_LEFT) != 0;
-  bool pressed = down && !open->down;
-  bool released = !down && open->down;
+  bool pressed = down && (!open->down);
+  bool released = (!down) && open->down;
+
   open->down = down;
   job->handled = true;
+
   if ((job->widget == NULL) || (state->active != job->window->id)) {
     if (open->open) {
       wmClose(state);
     }
+
     return;
   }
+
   uint8_t title = wmTitleAt(state, job->widget, &job->rect, event->x,
     event->y);
+
   if (!open->open) {
     if (title != WM_NO_WIDGET) {
       wmOpen(job, title);
     }
+
     return;
   } else if (title != WM_NO_WIDGET) {
     if (pressed && (title == open->menu)) {
@@ -336,20 +369,25 @@ static void wmMenuPointer(WmWidgetJob *job) {
     } else if (title != open->menu) {
       wmOpen(job, title);
     }
+
     return;
   }
+
   uint8_t item = WM_NO_WIDGET;
   uint8_t *menu = wmMenu(job->widget, open->menu);
+
   if (wmContains(&open->rect, event->x, event->y)) {
     item = wmItemAt(open, menu, event->y);
-    if ((item != WM_NO_WIDGET) && !wmUsable(wmMenuItem(menu, item))) {
+    if ((item != WM_NO_WIDGET) && (!wmUsable(wmMenuItem(menu, item)))) {
       item = WM_NO_WIDGET;
     }
   } else if (pressed) {
     wmClose(state);
     return;
   }
+
   wmHighlight(job, item);
+
   if (released) {
     wmChoose(job);
   }
@@ -375,6 +413,7 @@ static uint8_t wmMarked(const WmWidget *bar, uint8_t letter) {
       }
     }
   }
+
   return WM_NO_WIDGET;
 }
 
@@ -397,9 +436,11 @@ static void wmMenuKey(WmWidgetJob *job) {
   const GfxEvent *event = job->event;
   uint8_t key = event->keycode;
   bool alt = (key == GFX_KEY_LEFT_ALT) || (key == GFX_KEY_RIGHT_ALT);
+
   if (!open->open) {
     bool altAlone = open->altAlone;
     open->altAlone = alt && (event->down != 0);
+
     if ((event->down == 0) && (key == open->swallow)) {
       open->swallow = 0;
       job->handled = true;
@@ -409,12 +450,16 @@ static void wmMenuKey(WmWidgetJob *job) {
     ) {
       return;
     }
+
     uint8_t index = WM_NO_WIDGET;
+
     job->handled = alt;
+
     if (alt && (event->down == 0) && altAlone) {
       index = 0;
     } else if (key == GFX_KEY_F10) {
       job->handled = true;
+
       if (event->down != 0) {
         index = 0;
       }
@@ -424,13 +469,17 @@ static void wmMenuKey(WmWidgetJob *job) {
     ) {
       index = wmMarked(job->widget, event->ascii);
     }
+
     if (index != WM_NO_WIDGET) {
       wmOpen(job, index);
       job->handled = true;
     }
+
     return;
   }
+
   job->handled = true;
+
   if ((job->widget == NULL) || (open->window != job->window->id)) {
     wmClose(state);
     return;
@@ -438,17 +487,21 @@ static void wmMenuKey(WmWidgetJob *job) {
     if (key == open->swallow) {
       open->swallow = 0;
     }
+
     return;
   }
+
   uint8_t *menu = wmMenu(job->widget, open->menu);
   uint8_t count = (uint8_t) job->widget->numItems;
+
   open->swallow = key;
+
   if (key == GFX_KEY_ESCAPE) {
     wmClose(state);
   } else if (key == GFX_KEY_LEFT) {
-    wmOpen(job, (open->menu == 0) ? count - 1 : open->menu - 1);
+    wmOpen(job, (open->menu == 0) ? (count - 1) : (open->menu - 1));
   } else if (key == GFX_KEY_RIGHT) {
-    wmOpen(job, (open->menu + 1 == count) ? 0 : open->menu + 1);
+    wmOpen(job, ((open->menu + 1) == count) ? 0 : (open->menu + 1));
   } else if ((key == GFX_KEY_UP) || (key == GFX_KEY_DOWN)) {
     wmHighlight(job, wmNextUsable(menu, open->item,
       (key == GFX_KEY_UP) ? -1 : 1));
@@ -472,6 +525,7 @@ void* wmMenusInput(void *args) {
   } else {
     wmMenuPointer(job);
   }
+
   return args;
 }
 

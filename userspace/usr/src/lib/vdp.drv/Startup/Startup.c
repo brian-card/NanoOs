@@ -361,6 +361,7 @@ static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput) {
 static void vdpFinishSetup(VdpOutput *vdpOutput) {
   vdpOutput->listening = true;
   vdpOutput->nextPoll.tv_nsec = VDP_NEVER;
+
   if (vdpOutput->heldText != NULL) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Console", "vdpHoldReplay",
       vdpOutput);

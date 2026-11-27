@@ -71,6 +71,7 @@ static void flush(Term *term) {
     term->written = winGridWrite(&term->session, (uint8_t) term->window,
       TERM_GRID, parser->ops, parser->used);
   }
+
   parser->used = 0;
   parser->put = -1;
 }
@@ -86,12 +87,15 @@ static void flush(Term *term) {
 /// @return Returns where to write the operation.
 static uint8_t* reserve(Term *term, uint16_t size) {
   TermParser *parser = &term->parser;
-  if (parser->used + size > TERM_OPS_SIZE) {
+  if ((parser->used + size) > TERM_OPS_SIZE) {
     flush(term);
   }
+
   uint8_t *op = &parser->ops[parser->used];
+
   parser->used += size;
   parser->put = -1;
+
   return op;
 }
 
@@ -105,10 +109,11 @@ static uint8_t* reserve(Term *term, uint16_t size) {
 /// @return This function returns no value.
 static void lineFeed(Term *term) {
   TermParser *parser = &term->parser;
-  if (parser->row + 1 < parser->rows) {
+  if ((parser->row + 1) < parser->rows) {
     parser->row++;
     return;
   }
+
   uint8_t *op = reserve(term, WIN_GRID_SCROLL_SIZE);
   op[WIN_GRID_TAG] = WIN_GRID_SCROLL;
   op[WIN_GRID_SCROLL_TOP] = 0;
@@ -133,20 +138,24 @@ static void draw(Term *term, uint8_t c) {
     parser->column = 0;
     lineFeed(term);
   }
+
   int16_t put = parser->put;
   uint8_t *op = NULL;
+
   if (put >= 0) {
     op = &parser->ops[put];
   }
+
   if ((op == NULL) || (op[WIN_GRID_PUT_ROW] != parser->row)
-    || (op[WIN_GRID_PUT_COLUMN] + op[WIN_GRID_PUT_LENGTH] != parser->column)
+    || ((op[WIN_GRID_PUT_COLUMN] + op[WIN_GRID_PUT_LENGTH]) != parser->column)
     || (op[WIN_GRID_PUT_ATTRIBUTE] != parser->attribute)
     || (op[WIN_GRID_PUT_LENGTH] == UINT8_MAX)
     || (parser->used == TERM_OPS_SIZE)
   ) {
-    if (parser->used + WIN_GRID_PUT_SIZE(1) > TERM_OPS_SIZE) {
+    if ((parser->used + WIN_GRID_PUT_SIZE(1)) > TERM_OPS_SIZE) {
       flush(term);
     }
+
     put = (int16_t) parser->used;
     op = &parser->ops[put];
     op[WIN_GRID_TAG] = WIN_GRID_PUT;
@@ -157,11 +166,13 @@ static void draw(Term *term, uint8_t c) {
     parser->used += WIN_GRID_PUT_SIZE(0);
     parser->put = put;
   }
+
   parser->ops[parser->used++] = c;
   op[WIN_GRID_PUT_LENGTH]++;
   parser->column++;
+
   if ((parser->column >= parser->columns)
-    && (parser->row + 1 < parser->rows)
+    && ((parser->row + 1) < parser->rows)
   ) {
     parser->column = 0;
     parser->row++;
@@ -179,6 +190,7 @@ static void draw(Term *term, uint8_t c) {
 /// @return Returns the index.
 static uint8_t cursorIndex(uint8_t parameter, uint8_t limit) {
   uint8_t index = (parameter > 1) ? (uint8_t) (parameter - 1) : 0;
+
   return (index < limit) ? index : (uint8_t) (limit - 1);
 }
 
@@ -196,11 +208,13 @@ static void endParameter(TermParser *parser) {
   if (parameter > parser->maxParameter) {
     parser->maxParameter = parameter;
   }
+
   if (parser->numParameters == 0) {
     parser->firstParameter = parameter;
   } else if (parser->numParameters == 1) {
     parser->secondParameter = parameter;
   }
+
   parser->numParameters++;
   parser->parameter = 0;
 
@@ -214,6 +228,7 @@ static void endParameter(TermParser *parser) {
   } else {
     uint8_t bright = 0;
     uint8_t *color = &parser->foreground;
+
     if (parameter >= ANSI_SGR_BRIGHT_FOREGROUND) {
       parameter -= ANSI_SGR_BRIGHT_FOREGROUND - ANSI_SGR_FOREGROUND;
       bright = ANSI_COLORS_PER_SET;
@@ -222,7 +237,9 @@ static void endParameter(TermParser *parser) {
       parameter -= ANSI_SGR_BACKGROUND - ANSI_SGR_FOREGROUND;
       color = &parser->background;
     }
+
     parameter -= ANSI_SGR_FOREGROUND;
+
     if (parameter < ANSI_COLORS_PER_SET) {
       *color = parameter + bright;
     }
@@ -242,11 +259,13 @@ static void endParameter(TermParser *parser) {
 static void finishSequence(Term *term, uint8_t c) {
   TermParser *parser = &term->parser;
   endParameter(parser);
+
   if (c == 'm') {
     if (parser->foreground != TERM_UNCHANGED) {
       parser->attribute = WIN_ATTRIBUTE(parser->foreground,
         WIN_ATTRIBUTE_BACKGROUND(parser->attribute));
     }
+
     if (parser->background != TERM_UNCHANGED) {
       parser->attribute = WIN_ATTRIBUTE(
         WIN_ATTRIBUTE_FOREGROUND(parser->attribute), parser->background);
@@ -278,6 +297,7 @@ static void finishSequence(Term *term, uint8_t c) {
     int8_t count = (int8_t) (cursorIndex(parser->firstParameter,
       parser->rows - parser->row) + 1);
     uint8_t *op = reserve(term, WIN_GRID_SCROLL_SIZE);
+
     op[WIN_GRID_TAG] = WIN_GRID_SCROLL;
     op[WIN_GRID_SCROLL_TOP] = parser->row;
     op[WIN_GRID_SCROLL_BOTTOM] = parser->rows - 1;
@@ -298,6 +318,7 @@ static void finishSequence(Term *term, uint8_t c) {
 /// @return This function returns no value.
 static void escape(Term *term, uint8_t c) {
   TermParser *parser = &term->parser;
+
   if (c == '\033') {
     parser->escape = TERM_ESCAPE_STARTED;
   } else if (parser->escape == TERM_ESCAPE_STARTED) {
@@ -325,6 +346,7 @@ static void escape(Term *term, uint8_t c) {
         op[WIN_GRID_TAG] = WIN_GRID_REPORTS;
         op[WIN_GRID_REPORTS_ON] = parser->reports;
       }
+
       parser->escape = TERM_ESCAPE_NONE;
     }
   } else if ((c >= '0') && (c <= '9')) {
@@ -344,6 +366,7 @@ static void escape(Term *term, uint8_t c) {
     ) {
       finishSequence(term, c);
     }
+
     parser->escape = TERM_ESCAPE_NONE;
   }
 }
@@ -364,6 +387,7 @@ static void escape(Term *term, uint8_t c) {
 /// @return This function returns no value.
 static void parse(Term *term, const uint8_t *text) {
   TermParser *parser = &term->parser;
+
   for (; *text != '\0'; text++) {
     uint8_t c = *text;
     if ((c == '\033') || (parser->escape != TERM_ESCAPE_NONE)) {
@@ -403,6 +427,7 @@ static void parse(Term *term, const uint8_t *text) {
 void* termParse(void *args) {
   Term *term = (Term*) args;
   TermParser *parser = &term->parser;
+
   parse(term, (const uint8_t*) term->text);
   uint8_t column = parser->column;
   if (column >= parser->columns) {
@@ -419,6 +444,8 @@ void* termParse(void *args) {
     parser->cursorRow = parser->row;
     parser->cursorColumn = column;
   }
+
   flush(term);
+
   return args;
 }

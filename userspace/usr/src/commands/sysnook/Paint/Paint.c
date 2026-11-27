@@ -55,6 +55,7 @@
 static __attribute__((noinline)) bool meets(
   const GfxRect *rect, const GfxRect *clip) {
   GfxRect overlap;
+
   return wmIntersect(rect, clip, &overlap);
 }
 
@@ -75,6 +76,7 @@ static void fill(GfxCmdBuf *cmd, GfxColor color, int16_t left,
   int16_t top, int16_t width, int16_t height
 ) {
   GfxRect rect = { left, top, width, height };
+
   gfxCmdSetFgColor(cmd, color);
   gfxCmdDrawRect(cmd, &rect, true);
 }
@@ -97,6 +99,7 @@ static __attribute__((noinline)) void line(
 ) {
   GfxPoint from = { fromX, fromY };
   GfxPoint to = { toX, toY };
+
   gfxCmdDrawLine(cmd, from, to);
 }
 
@@ -120,8 +123,10 @@ static __attribute__((noinline)) void paintButton(
 ) {
   GfxCmdBuf *cmd = state->cmd;
   GfxRect rect;
+
   wmButtonRect(window, button, &rect);
   GfxColor face = bar;
+
   if ((state->grab == WM_GRAB_BUTTON) && (state->grabbed == window->id)) {
     if ((state->pressButton == button) && state->pressInside) {
       face = WM_DARK;
@@ -132,17 +137,21 @@ static __attribute__((noinline)) void paintButton(
   ) {
     face = WM_LIGHT;
     ink = WM_TEXT;
+
     if (button == WM_BUTTON_CLOSE) {
       face = WM_CLOSE_HOT;
       ink = WM_ON_ACCENT;
     }
   }
+
   fill(cmd, face, rect.x, rect.y, rect.w, rect.h);
-  int16_t left = rect.x + (WM_BUTTON_WIDTH - WM_GLYPH_SIZE) / 2;
-  int16_t top = rect.y + (WM_TITLE_HEIGHT - WM_GLYPH_SIZE) / 2;
+  int16_t left = rect.x + ((WM_BUTTON_WIDTH - WM_GLYPH_SIZE) / 2);
+  int16_t top = rect.y + ((WM_TITLE_HEIGHT - WM_GLYPH_SIZE) / 2);
   int16_t right = left + WM_GLYPH_SIZE - 1;
   int16_t bottom = top + WM_GLYPH_SIZE - 1;
+
   gfxCmdSetFgColor(cmd, ink);
+
   if (button == WM_BUTTON_MINIMIZE) {
     line(cmd, left, bottom, right, bottom);
   } else if (button == WM_BUTTON_CLOSE) {
@@ -153,6 +162,7 @@ static __attribute__((noinline)) void paintButton(
       WM_GLYPH_SIZE - WM_RESTORE_OFFSET, WM_GLYPH_SIZE - WM_RESTORE_OFFSET };
     GfxRect front = { left, top + WM_RESTORE_OFFSET,
       WM_GLYPH_SIZE - WM_RESTORE_OFFSET, WM_GLYPH_SIZE - WM_RESTORE_OFFSET };
+
     gfxCmdDrawRect(cmd, &back, false);
     fill(cmd, face, front.x, front.y, front.w, front.h);
     gfxCmdSetFgColor(cmd, ink);
@@ -185,6 +195,7 @@ static __attribute__((noinline)) void paintTitle(
   GfxColor bar = WM_LIGHT;
   GfxColor border = WM_DARK;
   GfxColor ink = WM_DARK;
+
   if ((window->id == state->active)
     || ((window->layer != WIN_LAYER_NORMAL) && (window->id == state->focus))
   ) {
@@ -192,47 +203,59 @@ static __attribute__((noinline)) void paintTitle(
     border = WM_ACCENT;
     ink = WM_ON_ACCENT;
   }
+
   GfxRect inner = { frame->x + WM_BORDER, frame->y + WM_BORDER,
-    frame->w - 2 * WM_BORDER, frame->h - 2 * WM_BORDER };
+    frame->w - (2 * WM_BORDER), frame->h - (2 * WM_BORDER) };
   GfxRect overlap;
-  if (!wmIntersect(clip, &inner, &overlap)
+
+  if ((!wmIntersect(clip, &inner, &overlap))
     || (overlap.w != clip->w) || (overlap.h != clip->h)
   ) {
     gfxCmdSetFgColor(cmd, border);
     gfxCmdDrawRect(cmd, frame, false);
   }
+
   GfxRect text = { inner.x, inner.y, inner.w - WM_BUTTONS_WIDTH,
     WM_TITLE_HEIGHT };
   if (wmIntersect(&text, clip, &overlap)) {
     fill(cmd, bar, overlap.x, overlap.y, overlap.w, overlap.h);
     uint8_t glyphW = state->display.builtInFont.glyphW;
     int16_t room = (text.w - WM_TITLE_INSET) / glyphW;
+
     if ((window->title != NULL) && (room > 0)) {
       char shown[WIN_TITLE_MAX + 1];
       size_t length = strlen(window->title);
+
       memcpy(shown, window->title, length + 1);
-      if ((int16_t) length > room) {
+
+      if (((int16_t) length) > room) {
         length = (size_t) room;
         shown[length] = '\0';
         size_t firstDot = 0;
+
         if (length > WM_ELLIPSIS_LENGTH) {
           firstDot = length - WM_ELLIPSIS_LENGTH;
         }
+
         for (size_t ii = firstDot; ii < length; ii++) {
           shown[ii] = '.';
         }
       }
+
       GfxPoint titleAt = { text.x + WM_TITLE_INSET,
         text.y + WM_TITLE_TEXT_TOP };
+
       gfxCmdSetFgColor(cmd, ink);
       gfxCmdDrawText(cmd, titleAt, shown);
     }
   }
+
   for (uint8_t button = WM_BUTTON_MINIMIZE; button <= WM_BUTTON_CLOSE;
     button++
   ) {
     GfxRect rect;
     wmButtonRect(window, button, &rect);
+
     if (meets(&rect, clip)) {
       paintButton(state, window, button, bar, ink);
     }
@@ -263,6 +286,7 @@ static void drawRun(GfxCmdBuf *cmd, int16_t left, int16_t top,
   uint8_t *record = gfxCmdBufReserve_(cmd, GFX_CMD_DRAW_TEXT_SIZE(length));
   if (record != NULL) {
     GfxPoint at = { left, top };
+
     record[GFX_CMD_TAG] = GFX_CMD_DRAW_TEXT;
     memcpy(&record[GFX_CMD_DRAW_TEXT_AT], &at, sizeof(at));
     record[GFX_CMD_DRAW_TEXT_LENGTH] = length;
@@ -291,34 +315,41 @@ static __attribute__((noinline)) void paintGrid(
   uint8_t glyphH = state->display.builtInFont.glyphH;
   uint8_t columns = grid->columns;
   const uint8_t *chars = grid->cells;
-  size_t plane = (size_t) columns * grid->rows;
+  size_t plane = ((size_t) columns) * grid->rows;
   int16_t top = window->frame.y + grid->top;
   int16_t gridLeft = window->frame.x + grid->left;
+
   for (uint8_t row = 0; row < grid->rows;
     row++, chars += columns, top += glyphH
   ) {
-    if ((top + glyphH <= clip->y) || (top >= clip->y + clip->h)) {
+    if (((top + glyphH) <= clip->y) || (top >= (clip->y + clip->h))) {
       continue;
     }
+
     uint8_t column = 0;
     while (column < columns) {
       uint8_t attribute = chars[plane + column];
       uint8_t end = column;
       uint8_t last = column;
+
       do {
         if (chars[end] != ' ') {
           last = end + 1;
         }
+
         end++;
       } while ((end < columns) && (chars[plane + end] == attribute));
-      int16_t left = gridLeft + (int16_t) (column * glyphW);
+
+      int16_t left = gridLeft + ((int16_t) (column * glyphW));
       fill(cmd, _ansiColors[WIN_ATTRIBUTE_BACKGROUND(attribute)], left, top,
         (int16_t) ((end - column) * glyphW), glyphH);
+
       if (last > column) {
         gfxCmdSetFgColor(cmd,
           _ansiColors[WIN_ATTRIBUTE_FOREGROUND(attribute)]);
         drawRun(cmd, left, top, &chars[column], last - column);
       }
+
       column = end;
     }
   }
@@ -345,7 +376,9 @@ static __attribute__((noinline)) void paintWindow(
   GfxCmdBuf *cmd = state->cmd;
   const GfxRect *frame = &window->frame;
   GfxRect body = *frame;
+
   gfxCmdPushScissor(cmd, frame);
+
   if ((window->flags & WIN_FLAG_DECORATED) != 0) {
     paintTitle(state, window, clip);
     body.x += WM_BORDER;
@@ -353,6 +386,7 @@ static __attribute__((noinline)) void paintWindow(
     body.w -= 2 * WM_BORDER;
     body.h -= WM_FRAME_TOP + WM_BORDER;
   }
+
   GfxRect overlap;
   if (wmIntersect(&body, clip, &overlap)) {
     const WmGrid *grid = (const WmGrid*) window->content;
@@ -362,9 +396,11 @@ static __attribute__((noinline)) void paintWindow(
         fill(cmd, window->face, frame->x + margin->x, frame->y + margin->y,
           margin->w, margin->h);
       }
+
       paintGrid(state, window, clip);
     } else {
       fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
+
       if (window->widgets != NULL) {
         WmPaintJob job = { state, window, clip };
         callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Widgets",
@@ -372,6 +408,7 @@ static __attribute__((noinline)) void paintWindow(
       }
     }
   }
+
   gfxCmdPopScissor(cmd);
 }
 
@@ -389,6 +426,7 @@ static __attribute__((noinline)) bool covered(
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     const WmWindow *window = &state->windows[ii];
     GfxRect overlap;
+
     if ((window->state != WIN_STATE_MINIMIZED)
       && wmIntersect(&window->frame, rect, &overlap)
       && (overlap.w == rect->w) && (overlap.h == rect->h)
@@ -396,6 +434,7 @@ static __attribute__((noinline)) bool covered(
       return true;
     }
   }
+
   return false;
 }
 
@@ -414,19 +453,23 @@ static void paintRect(WmState *state, const GfxRect *rect) {
   GfxRect screen = { 0, 0, (int16_t) state->display.width,
     (int16_t) state->display.height };
   GfxRect clip;
+
   if (!wmIntersect(rect, &screen, &clip)) {
     return;
   }
+
   gfxCmdPushScissor(cmd, &clip);
   const GfxRect *menu = &state->menu.rect;
   bool inMenu = state->menu.open && (clip.x >= menu->x) && (clip.y >= menu->y)
-    && (clip.x + clip.w <= menu->x + menu->w)
-    && (clip.y + clip.h <= menu->y + menu->h);
-  if (!inMenu && !covered(state, &clip)) {
+    && ((clip.x + clip.w) <= (menu->x + menu->w))
+    && ((clip.y + clip.h) <= (menu->y + menu->h));
+
+  if ((!inMenu) && (!covered(state, &clip))) {
     gfxCmdSetBgColor(cmd, WM_DESKTOP);
     gfxCmdClear(cmd);
   }
-  for (uint8_t ii = 0; !inMenu && (ii < state->numWindows); ii++) {
+
+  for (uint8_t ii = 0; (!inMenu) && (ii < state->numWindows); ii++) {
     const WmWindow *window = &state->windows[ii];
     if ((window->state != WIN_STATE_MINIMIZED)
       && meets(&window->frame, &clip)
@@ -434,11 +477,13 @@ static void paintRect(WmState *state, const GfxRect *rect) {
       paintWindow(state, window, &clip);
     }
   }
+
   if (state->menu.open && meets(&state->menu.rect, &clip)) {
     WmPaintJob job = { state, NULL, &clip };
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "MenuPaint",
       "wmMenusPaintDropdown", &job);
   }
+
   gfxCmdPopScissor(cmd);
 }
 
@@ -461,6 +506,7 @@ static void paintOwned(WmState *state, const GfxRect *rect, uint8_t owner) {
     paintRect(state, rect);
     return;
   }
+
   gfxCmdPushScissor(state->cmd, rect);
   paintWindow(state, window, rect);
   gfxCmdPopScissor(state->cmd);
@@ -499,9 +545,11 @@ static void paintFrame(WmState *state) {
   bool outlineMoved = (memcmp(&state->outline, &state->outlineShown,
     sizeof(GfxRect)) != 0);
   bool hold = (state->outline.w != 0) && (state->outlineShown.w != 0);
+
   if (outlineMoved && (state->outlineShown.w != 0)) {
     xorOutline(cmd, &state->outlineShown);
   }
+
   if (state->copy) {
     gfxCmdCopyRect(cmd, &state->copySource, state->copyTarget);
   }
@@ -514,24 +562,30 @@ static void paintFrame(WmState *state) {
     } else {
       uint8_t top = state->windows[state->numWindows - 1].id;
       bool hidden = false;
+
       for (uint8_t ii = 0; ii < state->numDamage; ii++) {
         hidden = hidden || ((state->damageOwner[ii] != 0)
           && ((state->damageOwner[ii] != top) || state->menu.open));
       }
+
       if (hidden) {
         callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Restack", "wmOcclude",
           state);
       }
+
       for (uint8_t ii = 0; ii < state->numDamage; ii++) {
         paintOwned(state, &state->damage[ii], state->damageOwner[ii]);
       }
     }
+
     state->paintAll = false;
     state->numDamage = 0;
   }
+
   if (outlineMoved && (state->outline.w != 0)) {
     xorOutline(cmd, &state->outline);
   }
+
   state->outlineShown = state->outline;
   state->copy = false;
   state->status = (uint8_t) gfxSubmit(cmd);
@@ -548,10 +602,13 @@ static void paintFrame(WmState *state) {
 void* wmPaint(void *args) {
   WmState *state = (WmState*) args;
   state->status = GFX_OK;
+
   if ((state->refocus[0] | state->refocus[1] | state->raised) != 0) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Restack", "wmRestack",
       state);
   }
+
   paintFrame(state);
+
   return args;
 }

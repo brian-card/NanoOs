@@ -48,6 +48,7 @@ static uint8_t vdpImagePixel(uint8_t format, const uint8_t *pixel) {
     return (uint8_t) (((value >> 6) & 0x03) | ((value >> 2) & 0x0c)
       | ((value << 2) & 0x30) | ((value << 6) & 0xc0));
   }
+
   return (uint8_t) (vdpChannelBits(pixel[0]) | (vdpChannelBits(pixel[1]) << 2)
     | (vdpChannelBits(pixel[2]) << 4) | 0xc0);
 }
@@ -73,6 +74,7 @@ static void vdpWritePixels(uint8_t format, const uint8_t *pixels,
     } else {
       vdpWrite(pixels, numPixels * 4);
     }
+
     return;
   } else if (pixels == NULL) {
     vdpWriteZeros(numPixels);
@@ -81,15 +83,18 @@ static void vdpWritePixels(uint8_t format, const uint8_t *pixels,
 
   uint8_t bytesPerPixel = (format == GFX_FMT_RGB888) ? 3 : 1;
   uint8_t chunk[32];
+
   while (numPixels > 0) {
     uint8_t length = sizeof(chunk);
     if (numPixels < length) {
       length = (uint8_t) numPixels;
     }
+
     for (uint8_t ii = 0; ii < length; ii++) {
       chunk[ii] = vdpImagePixel(format, pixels);
       pixels += bytesPerPixel;
     }
+
     vdpWrite(chunk, length);
     numPixels -= length;
   }
@@ -113,17 +118,20 @@ static void vdpWritePixels(uint8_t format, const uint8_t *pixels,
 static uint8_t vdpUploadImage(VdpOutput *vdpOutput, GfxUploadImageArgs *args) {
   static const uint8_t bytesPerPixel[] = { 4, 1, 3 };
   VdpDrawState *draw = vdpOutput->draw;
+
   if ((args->format > GFX_FMT_RGB888) || (args->width == 0)
     || (args->height == 0)
   ) {
     return GFX_ERR_INVALID_STATE;
   }
-  uint32_t numPixels = (uint32_t) args->width * args->height;
+
+  uint32_t numPixels = ((uint32_t) args->width) * args->height;
   if ((args->pixels != NULL)
-    && (args->size != numPixels * bytesPerPixel[args->format])
+    && (args->size != (numPixels * bytesPerPixel[args->format]))
   ) {
     return GFX_ERR_INVALID_STATE;
   }
+
   uint8_t slot = vdpFreeSlot(draw->imagesUsed, VDP_MAX_IMAGES);
   if (slot == VDP_MAX_IMAGES) {
     return GFX_ERR_OUT_OF_HANDLES;
@@ -134,6 +142,7 @@ static uint8_t vdpUploadImage(VdpOutput *vdpOutput, GfxUploadImageArgs *args) {
   uint32_t pixelsPerBlock = 0xFFFF / vdpBytesPerPixel;
   const uint8_t *pixels = (const uint8_t*) args->pixels;
   const uint8_t clear[] = { 23, 0, 0xA0, VDP_WORD(id), 2 };
+
   vdpWrite(clear, sizeof(clear));
   uint32_t left = numPixels;
   while (left > 0) {
@@ -142,17 +151,22 @@ static uint8_t vdpUploadImage(VdpOutput *vdpOutput, GfxUploadImageArgs *args) {
     const uint8_t write[] = {
       23, 0, 0xA0, VDP_WORD(id), 0, VDP_WORD(blockSize)
     };
+
     vdpWrite(write, sizeof(write));
     vdpWritePixels(args->format, pixels, blockPixels);
+
     if (pixels != NULL) {
       pixels += blockPixels * bytesPerPixel[args->format];
     }
+
     left -= blockPixels;
   }
+
   if (numPixels > pixelsPerBlock) {
     const uint8_t consolidate[] = { 23, 0, 0xA0, VDP_WORD(id), 0x0E };
     vdpWrite(consolidate, sizeof(consolidate));
   }
+
   const uint8_t make[] = {
     23, 27, 0x20, VDP_WORD(id),
     23, 27, 0x21, VDP_WORD(args->width), VDP_WORD(args->height),
@@ -163,6 +177,7 @@ static uint8_t vdpUploadImage(VdpOutput *vdpOutput, GfxUploadImageArgs *args) {
   draw->imageWidths[slot] = args->width;
   draw->imageHeights[slot] = args->height;
   args->handle = id;
+
   return GFX_OK;
 }
 
@@ -180,11 +195,14 @@ static uint8_t vdpImageSize(VdpOutput *vdpOutput, GfxImageSizeArgs *args) {
   VdpDrawState *draw = vdpOutput->draw;
   uint8_t slot = vdpSlot(draw->imagesUsed, args->handle, VDP_IMAGE_ID_BASE,
     VDP_MAX_IMAGES);
+
   if (slot == VDP_MAX_IMAGES) {
     return GFX_ERR_INVALID_HANDLE;
   }
+
   args->width = draw->imageWidths[slot];
   args->height = draw->imageHeights[slot];
+
   return GFX_OK;
 }
 
@@ -210,15 +228,18 @@ static uint8_t vdpCaptureRect(VdpOutput *vdpOutput,
   int top = (rect->y > 0) ? rect->y : 0;
   int right = rect->x + rect->w;
   int bottom = rect->y + rect->h;
+
   if (right > VDP_SCREEN_WIDTH) {
     right = VDP_SCREEN_WIDTH;
   }
+
   if (bottom > VDP_SCREEN_HEIGHT) {
     bottom = VDP_SCREEN_HEIGHT;
   }
   if ((right <= left) || (bottom <= top)) {
     return GFX_ERR_INVALID_STATE;
   }
+
   uint8_t slot = vdpFreeSlot(draw->imagesUsed, VDP_MAX_IMAGES);
   if (slot == VDP_MAX_IMAGES) {
     return GFX_ERR_OUT_OF_HANDLES;
@@ -230,11 +251,13 @@ static uint8_t vdpCaptureRect(VdpOutput *vdpOutput,
     25, 4, VDP_WORD(right - 1), VDP_WORD(bottom - 1),
     23, 27, 0x21, VDP_WORD(id), 0, 0
   };
+
   vdpWrite(capture, sizeof(capture));
   draw->imagesUsed |= (uint16_t) (1 << slot);
   draw->imageWidths[slot] = (uint16_t) (right - left);
   draw->imageHeights[slot] = (uint16_t) (bottom - top);
   args->handle = id;
+
   return GFX_OK;
 }
 
@@ -254,6 +277,7 @@ void* vdpImages(void *args) {
   uint8_t type = (uint8_t) processMessageType(message);
   void *payload = processMessageData(message);
   uint8_t status = GFX_OK;
+
   if (type == GFX_MSG_UPLOAD_IMAGE) {
     status = vdpUploadImage(vdpOutput, (GfxUploadImageArgs*) payload);
   } else if (type == GFX_MSG_GET_IMAGE_SIZE) {
@@ -261,6 +285,8 @@ void* vdpImages(void *args) {
   } else {
     status = vdpCaptureRect(vdpOutput, (GfxCaptureRectArgs*) payload);
   }
+
   *((uint8_t*) payload) = status;
+
   return args;
 }

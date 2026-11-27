@@ -314,17 +314,21 @@ static int mockStartProcessesFn(int32_t deviceId, va_list args) {
 /// user processes.
 static int mockDoLaunchProcesses(void) {
   int returnValue = 0;
+
   if (_fileCacheDepth > 0) {
     returnValue = halCommonInitFileCache(_fileCacheDepth);
   }
+
   int launchStatus = halCommonLaunchProcesses();
   if (launchStatus != 0) {
     returnValue = launchStatus;
   }
+
   if (_graphicsClientPath != NULL) {
     ProcessId driverPid = schedulerGetFirstShellPid() + schedulerGetNumShells()
       + _graphicsDriverSlot;
     int graphicsStatus = schedulerSetGraphics(driverPid, _graphicsClientPath);
+
     if (graphicsStatus == 0) {
       graphicsStatus = registerProcessName(GFX_DRIVER_PROCESS_NAME, driverPid);
     }
@@ -332,12 +336,14 @@ static int mockDoLaunchProcesses(void) {
       returnValue = graphicsStatus;
     }
   }
+
   if (_launchHook != NULL) {
     int hookStatus = _launchHook();
     if (hookStatus != 0) {
       returnValue = hookStatus;
     }
   }
+
   return returnValue;
 }
 

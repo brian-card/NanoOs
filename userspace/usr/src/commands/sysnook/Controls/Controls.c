@@ -87,10 +87,13 @@ static bool wmPass(WmInputJob *job, WmWidget *widget, const char *overlay,
 ) {
   WmWidgetJob pass = { job->state, job->window, widget, { 0, 0, 0, 0 },
     job->event, false, false };
+
   if (widget != NULL) {
     wmWidgetRect(job->window, widget, &pass.rect);
   }
+
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, function, &pass);
+
   return pass.handled;
 }
 
@@ -138,11 +141,13 @@ static WmWidget* wmBar(const WmWindow *window, uint8_t index) {
   ) {
     return &widgets->widget[index];
   }
+
   for (uint8_t ii = 0; ii < widgets->count; ii++) {
     if (widgets->widget[ii].kind == WIN_WIDGET_MENU_BAR) {
       return &widgets->widget[ii];
     }
   }
+
   return NULL;
 }
 
@@ -164,11 +169,14 @@ static uint8_t wmControlAt(const WmWindow *window, const WmWidgets *widgets,
   for (uint8_t ii = widgets->count; ii > 0; ii--) {
     const WmWidget *widget = &widgets->widget[ii - 1];
     GfxRect rect;
+
     wmWidgetRect(window, widget, &rect);
+
     if (wmTakesPress(widget) && wmContains(&rect, pointX, pointY)) {
       return ii - 1;
     }
   }
+
   return WM_NO_WIDGET;
 }
 
@@ -190,12 +198,14 @@ static void wmClick(WmState *state, const WmWindow *window,
   WmWidgets *widgets, WmWidget *widget
 ) {
   wmReleaseChanged(state);
+
   if ((widget->kind == WIN_WIDGET_TOGGLE)
     || (widget->kind == WIN_WIDGET_CHECK_BOX)
   ) {
     widget->value = (widget->value != 0) ? 0 : 1;
   } else if (widget->kind == WIN_WIDGET_RADIO) {
     widget->value = 1;
+
     for (uint8_t ii = 0; ii < widgets->count; ii++) {
       WmWidget *other = &widgets->widget[ii];
       if ((other != widget) && (other->kind == WIN_WIDGET_RADIO)
@@ -206,6 +216,7 @@ static void wmClick(WmState *state, const WmWindow *window,
       }
     }
   }
+
   wmDamageWidget(state, window, widget);
   WinEvent *event = wmSend(state, window->owner, WIN_EVENT_COMMAND,
     window->id);
@@ -231,9 +242,11 @@ static void wmSetFocus(WmState *state, const WmWindow *window,
   WmWidgets *widgets, uint8_t index
 ) {
   wmReleaseChanged(state);
+
   if (widgets->focus < widgets->count) {
     wmDamageWidget(state, window, &widgets->widget[widgets->focus]);
   }
+
   widgets->focus = index;
   wmDamageWidget(state, window, &widgets->widget[index]);
 }
@@ -260,7 +273,8 @@ static bool wmEdit(WmState *state, const WmWindow *window, WmWidget *widget,
   bool editable = (widget->flags & WIN_WIDGET_READ_ONLY) == 0;
   uint8_t length = widget->textLength;
   uint8_t caret = widget->caret;
-  if (!printable && (key != GFX_KEY_BACKSPACE) && (key != GFX_KEY_DELETE)
+
+  if ((!printable) && (key != GFX_KEY_BACKSPACE) && (key != GFX_KEY_DELETE)
     && (key != GFX_KEY_LEFT) && (key != GFX_KEY_RIGHT)
     && (key != GFX_KEY_HOME) && (key != GFX_KEY_END)
     && (key != GFX_KEY_ENTER)
@@ -298,24 +312,30 @@ static bool wmEdit(WmState *state, const WmWindow *window, WmWidget *widget,
       command->widget = widget->id;
     }
   }
+
   widget->scroll = wmFieldScroll(state, window, widget);
   wmDamageWidget(state, window, widget);
-  if ((state->times != NULL) && !state->echoKey) {
+
+  if ((state->times != NULL) && (!state->echoKey)) {
     timespec_get(&state->keySent, TIME_UTC);
     state->echoKey = true;
   }
+
   state->gridPainted = true;
+
   if (widget->textLength != length) {
     if ((state->heldWindow != 0) && ((state->heldWindow != window->id)
       || (state->heldWidget != widget->id))
     ) {
       wmReleaseChanged(state);
     }
+
     state->heldWindow = window->id;
     state->heldWidget = widget->id;
     timespec_get(&state->heldSince, TIME_UTC);
     state->eventsWaiting = true;
   }
+
   return true;
 }
 
@@ -361,10 +381,12 @@ void* wmControlsPress(void *args) {
   WmWidgets *widgets = (WmWidgets*) job->window->widgets;
   uint8_t index = wmControlAt(job->window, widgets, job->event->x,
     job->event->y);
+
   job->handled = (index != WM_NO_WIDGET);
   if (!job->handled) {
     return args;
   }
+
   WmWidget *widget = &widgets->widget[index];
   if (widget->kind == WIN_WIDGET_MENU_BAR) {
     wmMenus(job, widget);
@@ -380,21 +402,25 @@ void* wmControlsPress(void *args) {
     wmWidgetRect(job->window, widget, &rect);
     uint8_t glyphW = state->display.builtInFont.glyphW;
     int16_t at = wmFieldScroll(state, job->window, widget)
-      + (job->event->x - rect.x - WM_FIELD_INSET + glyphW / 2) / glyphW;
+      + ((job->event->x - rect.x - WM_FIELD_INSET + (glyphW / 2)) / glyphW);
+
     if (at < 0) {
       at = 0;
     } else if (at > widget->textLength) {
       at = widget->textLength;
     }
+
     widget->caret = (uint8_t) at;
     wmSetFocus(state, job->window, widgets, index);
     return args;
   }
+
   widgets->pressed = index;
   widgets->pressInside = true;
   wmSetFocus(state, job->window, widgets, index);
   state->grab = WM_GRAB_WIDGET;
   state->grabbed = job->window->id;
+
   return args;
 }
 
@@ -410,32 +436,41 @@ void* wmControlsPress(void *args) {
 void* wmControlsPointer(void *args) {
   WmInputJob *job = (WmInputJob*) args;
   WmState *state = job->state;
+
   if (state->grab == WM_GRAB_MENU) {
     wmMenus(job, wmBar(job->window, state->menu.bar));
     return args;
   }
+
   WmWidgets *widgets = (job->window != NULL)
     ? (WmWidgets*) job->window->widgets : NULL;
   bool down = (job->event->buttons & GFX_BUTTON_LEFT) != 0;
+
   if (!down) {
     state->grab = WM_GRAB_NONE;
     state->grabbed = 0;
   }
+
   if ((widgets == NULL) || (widgets->pressed >= widgets->count)) {
     return args;
   }
+
   WmWidget *widget = &widgets->widget[widgets->pressed];
   GfxRect rect;
+
   wmWidgetRect(job->window, widget, &rect);
   bool inside = wmContains(&rect, job->event->x, job->event->y);
+
   if (widget->kind == WIN_WIDGET_CANVAS) {
     wmCanvasPointer(state, job->window, widget, job->event);
     inside = widgets->pressInside;
   }
+
   if (!down) {
     widgets->pressed = WM_NO_WIDGET;
     widgets->pressInside = false;
     wmDamageWidget(state, job->window, widget);
+
     if (inside && wmClickable(widget)) {
       wmClick(state, job->window, widgets, widget);
     }
@@ -443,6 +478,7 @@ void* wmControlsPointer(void *args) {
     widgets->pressInside = inside;
     wmDamageWidget(state, job->window, widget);
   }
+
   return args;
 }
 
@@ -475,11 +511,14 @@ static void wmTab(WmState *state, const WmWindow *window, WmWidgets *widgets,
 ) {
   int16_t count = widgets->count;
   int16_t at = widgets->focus;
+
   if (at >= count) {
     at = (step > 0) ? -1 : count;
   }
+
   for (int16_t tries = 0; tries < count; tries++) {
     at += step;
+
     if (at < 0) {
       at = count - 1;
     } else if (at >= count) {
@@ -508,6 +547,7 @@ static WmWidget* wmFlagged(WmWidgets *widgets, uint8_t flag) {
       return widget;
     }
   }
+
   return NULL;
 }
 
@@ -523,25 +563,29 @@ static WmWidget* wmFlagged(WmWidgets *widgets, uint8_t flag) {
 /// @return Returns true if the widget used the key, false otherwise.
 static bool wmFocusedKey(WmInputJob *job, WmWidgets *widgets) {
   const GfxEvent *event = job->event;
+
   if (widgets->focus >= widgets->count) {
     return false;
   }
+
   WmWidget *widget = &widgets->widget[widgets->focus];
   bool usable
     = (widget->flags & (WIN_WIDGET_DISABLED | WIN_WIDGET_HIDDEN)) == 0;
   bool enter = (event->keycode == GFX_KEY_ENTER);
+
   if ((widget->kind == WIN_WIDGET_TEXT_FIELD) && usable) {
     if (enter && (event->down != 0)
       && (wmFlagged(widgets, WIN_WIDGET_DEFAULT) != NULL)
     ) {
       return false;
     }
+
     return wmEdit(job->state, job->window, widget, event);
   } else if ((widget->kind == WIN_WIDGET_LIST) && usable) {
     return wmList(job, widget);
   } else if ((event->keycode != ' ')
-    && !(enter && ((widget->kind == WIN_WIDGET_BUTTON)
-      || (widget->kind == WIN_WIDGET_TOGGLE)))
+    && (!(enter && ((widget->kind == WIN_WIDGET_BUTTON)
+      || (widget->kind == WIN_WIDGET_TOGGLE))))
   ) {
     return false;
   } else if (!wmClickable(widget)) {
@@ -549,6 +593,7 @@ static bool wmFocusedKey(WmInputJob *job, WmWidgets *widgets) {
   } else if (event->down != 0) {
     wmClick(job->state, job->window, widgets, widget);
   }
+
   return true;
 }
 
@@ -574,13 +619,17 @@ void* wmControlsKey(void *args) {
     || ((event->modifiers & WM_MOD_ALT) != 0) || (key == GFX_KEY_LEFT_ALT)
     || (key == GFX_KEY_RIGHT_ALT) || (key == GFX_KEY_F10);
   WmWidget *bar = menuKey ? wmBar(job->window, menu->bar) : NULL;
+
   if (((bar != NULL) || menu->open) && wmMenus(job, bar)) {
     job->handled = true;
     return args;
   }
+
   WmWidget *button = NULL;
+
   if ((key == GFX_KEY_TAB) && ((event->modifiers & WM_MOD_ALT) == 0)) {
     job->handled = true;
+
     if (event->down != 0) {
       wmTab(job->state, job->window, widgets,
         ((event->modifiers & GFX_MOD_SHIFT) != 0) ? -1 : 1);
@@ -592,15 +641,19 @@ void* wmControlsKey(void *args) {
   } else if (key == GFX_KEY_ESCAPE) {
     button = wmFlagged(widgets, WIN_WIDGET_CANCEL);
   }
+
   if (button != NULL) {
     job->handled = true;
+
     if (event->down != 0) {
       wmClick(job->state, job->window, widgets, button);
     }
   }
+
   if (job->handled && (event->down != 0)) {
     job->state->widgetKey = key;
   }
+
   return args;
 }
 
@@ -616,10 +669,12 @@ void* wmControlsWheel(void *args) {
   WmWidgets *widgets = (WmWidgets*) job->window->widgets;
   uint8_t index = wmControlAt(job->window, widgets, job->event->x,
     job->event->y);
+
   if ((index != WM_NO_WIDGET)
     && (widgets->widget[index].kind == WIN_WIDGET_LIST)
   ) {
     job->handled = wmList(job, &widgets->widget[index]);
   }
+
   return args;
 }

@@ -91,6 +91,7 @@ static bool parseMode(const char *value, const char *enabled,
   } else {
     return false;
   }
+
   return true;
 }
 
@@ -105,6 +106,7 @@ static bool parseOptions(WmState *state) {
   for (int ii = 1; ii < state->argc; ii++) {
     const char *arg = state->argv[ii];
     bool valid = true;
+
     if (strncmp(arg, WM_OPTION_MOVE, WM_LITERAL_LENGTH(WM_OPTION_MOVE)) == 0) {
       valid = parseMode(&arg[WM_LITERAL_LENGTH(WM_OPTION_MOVE)], "live",
         "outline", &state->liveMove);
@@ -119,6 +121,7 @@ static bool parseOptions(WmState *state) {
       char *end = NULL;
       long budget = strtol(&arg[WM_LITERAL_LENGTH(WM_OPTION_BUDGET)], &end,
         10);
+
       valid = (*end == '\0') && (budget > 0) && (budget <= UINT16_MAX);
       state->budget = (uint16_t) budget;
     } else if (strcmp(arg, "--finish") == 0) {
@@ -127,14 +130,17 @@ static bool parseOptions(WmState *state) {
       if (state->times == NULL) {
         state->times = (WmTimes*) calloc(WM_TIMED_KINDS, sizeof(WmTimes));
       }
+
       valid = (state->times != NULL);
     } else {
       valid = false;
     }
+
     if (!valid) {
       return false;
     }
   }
+
   return true;
 }
 
@@ -150,17 +156,21 @@ static bool parseOptions(WmState *state) {
 /// @return This function returns no value.
 static void wmBegin(WmState *state) {
   state->exitStatus = 0;
+
   if ((state->argc > 1) && (strcmp(state->argv[1], "--help") == 0)) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Usage", "wmUsage", stdout);
     state->exitStatus = WM_EXIT_HELP;
     return;
   }
+
   state->budget = WM_DEFAULT_BUDGET;
+
   if (!parseOptions(state)) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Usage", "wmUsage", stderr);
     state->exitStatus = 1;
     return;
   }
+
   GfxError status = gfxOpenDisplay(&state->display, GFX_DRIVER_PROCESS_NAME,
     WM_DISPLAY_WIDTH, WM_DISPLAY_HEIGHT);
   if (status == GFX_ERR_DISPLAY_BUSY) {
@@ -182,6 +192,7 @@ static void wmBegin(WmState *state) {
       state->exitStatus = 1;
       return;
     }
+
     gfxCmdBufBegin(state->cmd, 0);
   }
 }
@@ -200,13 +211,17 @@ static void wmFinish(WmState *state) {
       gfxErrorString((GfxError) state->status));
     state->exitStatus = 1;
   }
+
   state->cmd = gfxCmdBufDestroy(state->cmd);
-  if (state->displayOpen && !state->revoked) {
+
+  if (state->displayOpen && (!state->revoked)) {
     gfxCloseDisplay(&state->display);
   }
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     free(state->windows[ii].title);
   }
+
   free(state->windows);
   state->windows = NULL;
   state->numWindows = 0;
@@ -229,5 +244,6 @@ void* wmStart(void *args) {
   } else {
     wmFinish(state);
   }
+
   return args;
 }

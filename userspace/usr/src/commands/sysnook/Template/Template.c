@@ -77,6 +77,7 @@ GFX_STATIC_ASSERT((WIN_WIDGET_LIST == 6) && (WIN_WIDGET_MENU_BAR == 10),
 static uint16_t wmItemsSize(const uint8_t *record) {
   const uint8_t *size = &record[WIN_RECORD_HEADER_SIZE
     + _wmFields[record[WIN_RECORD_KIND]] - sizeof(uint16_t)];
+
   return (uint16_t) (size[0] | (size[1] << 8));
 }
 
@@ -93,6 +94,7 @@ static int16_t wmCountMenus(const uint8_t *menus, uint16_t size) {
   WmMenusCheck check = { menus, size, -1 };
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Property", "wmPropertyMenus",
     &check);
+
   return check.count;
 }
 
@@ -119,16 +121,19 @@ static uint16_t wmRecordSize(const uint8_t *record, uint16_t left,
     *status = WIN_ERR_NOT_SUPPORTED;
     return 0;
   }
+
   bool list = (kind == WIN_WIDGET_LIST) || (kind == WIN_WIDGET_MENU_BAR);
   uint16_t size = WIN_RECORD_HEADER_SIZE + _wmFields[kind];
+
   if (kind == WIN_WIDGET_CANVAS) {
     if (left < size) {
       *status = WIN_ERR_INVALID;
       return 0;
     }
+
     return size;
   }
-  if ((left < size) || (!list && (left == size))
+  if ((left < size) || ((!list) && (left == size))
     || (list && (wmItemsSize(record) > WIN_LIST_ITEMS_MAX))
   ) {
     *status = WIN_ERR_INVALID;
@@ -139,10 +144,12 @@ static uint16_t wmRecordSize(const uint8_t *record, uint16_t left,
   } else {
     size += 1 + record[size];
   }
+
   if (size > left) {
     *status = WIN_ERR_INVALID;
     return 0;
   }
+
   return size;
 }
 
@@ -166,6 +173,7 @@ static const uint8_t* wmRecordText(const uint8_t *record) {
 /// @return Returns the bytes.
 static uint8_t wmMaxLength(const uint8_t *record) {
   uint8_t most = record[WIN_RECORD_HEADER_SIZE];
+
   return (most == 0) ? UINT8_MAX : most;
 }
 
@@ -208,28 +216,35 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
   uint8_t status = WIN_OK;
   uint16_t count = 0;
   uint32_t textBytes = 0;
+
   if ((records == NULL) || (size == 0)) {
     return WIN_ERR_INVALID;
   }
+
   for (uint16_t at = 0; at < size; count++) {
     uint16_t length = wmRecordSize(&records[at], size - at, &status);
     if (length == 0) {
       return status;
     }
+
     uint8_t id = records[at + WIN_RECORD_ID];
     bool repeated = (id != WIN_NONE) && (wmWidgetById(old, id) != NULL);
-    for (uint16_t earlier = 0; !repeated && (earlier < at); ) {
+
+    for (uint16_t earlier = 0; (!repeated) && (earlier < at); ) {
       repeated = (id != WIN_NONE) && (records[earlier + WIN_RECORD_ID] == id);
       earlier += wmRecordSize(&records[earlier], size - earlier, &status);
     }
+
     if (repeated) {
       return WIN_ERR_INVALID;
     }
+
     uint8_t kind = records[at + WIN_RECORD_KIND];
     if (kind == WIN_WIDGET_TEXT_FIELD) {
       textBytes += wmMaxLength(&records[at]);
     } else if ((kind == WIN_WIDGET_LIST) || (kind == WIN_WIDGET_MENU_BAR)) {
       textBytes += wmItemsSize(&records[at]);
+
       if ((kind == WIN_WIDGET_MENU_BAR)
         && (wmCountMenus(wmRecordText(&records[at]),
           wmItemsSize(&records[at])) < 0)
@@ -239,46 +254,56 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
     } else if (kind != WIN_WIDGET_CANVAS) {
       textBytes += *wmRecordText(&records[at]);
     }
+
     at += length;
   }
-  if (oldCount + count > WIN_MAX_WIDGETS) {
+
+  if ((oldCount + count) > WIN_MAX_WIDGETS) {
     return WIN_ERR_NO_MEMORY;
   }
 
   uint32_t bytes = sizeof(WmWidgets)
-    + (uint32_t) (oldCount + count - 1) * sizeof(WmWidget) + textBytes;
+    + (((uint32_t) (oldCount + count - 1)) * sizeof(WmWidget)) + textBytes;
+
   if (old != NULL) {
     bytes += oldBytes - sizeof(WmWidgets)
-      - (uint32_t) (oldCount - 1) * sizeof(WmWidget);
+      - (((uint32_t) (oldCount - 1)) * sizeof(WmWidget));
   }
+
   if ((bytes > UINT16_MAX)
-    || !wmCharge(state, window->owner, (int32_t) bytes - oldBytes)
+    || (!wmCharge(state, window->owner, ((int32_t) bytes) - oldBytes))
   ) {
     return WIN_ERR_NO_MEMORY;
   }
+
   WmWidgets *widgets = (WmWidgets*) malloc(sizeof(WmWidgets)
-    + (size_t) (oldCount + count - 1) * sizeof(WmWidget));
+    + (((size_t) (oldCount + count - 1)) * sizeof(WmWidget)));
   if (widgets == NULL) {
-    wmCharge(state, window->owner, (int32_t) oldBytes - (int32_t) bytes);
+    wmCharge(state, window->owner, ((int32_t) oldBytes) - ((int32_t) bytes));
     return WIN_ERR_NO_MEMORY;
   }
+
   widgets->count = oldCount;
   widgets->focus = WM_NO_WIDGET;
   widgets->pressed = WM_NO_WIDGET;
   widgets->pressInside = false;
+
   if (old != NULL) {
     widgets->focus = old->focus;
     widgets->pressed = old->pressed;
     widgets->pressInside = old->pressInside;
     memcpy(widgets->widget, old->widget, oldCount * sizeof(WmWidget));
   }
+
   widgets->bytes = (uint16_t) bytes;
 
   GfxRect body;
   wmBody(window, &body);
+
   for (uint16_t at = 0; at < size; ) {
     const uint8_t *record = &records[at];
     WmWidget *widget = &widgets->widget[widgets->count];
+
     memset(widget, 0, sizeof(*widget));
     widget->kind = record[WIN_RECORD_KIND];
     widget->id = record[WIN_RECORD_ID];
@@ -288,6 +313,7 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
     widget->marginRight = body.w - widget->rect.x - widget->rect.w;
     widget->marginBottom = body.h - widget->rect.y - widget->rect.h;
     const uint8_t *fields = &record[WIN_RECORD_HEADER_SIZE];
+
     if (widget->kind == WIN_WIDGET_LABEL) {
       widget->align = fields[0];
     } else if (widget->kind == WIN_WIDGET_RADIO) {
@@ -300,9 +326,11 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
     ) {
       widget->value = fields[0];
     }
+
     const uint8_t *text = wmRecordText(record);
     const uint8_t *source = &text[1];
     uint16_t copy = 0;
+
     if (widget->kind == WIN_WIDGET_LIST) {
       source = text;
       widget->itemsSize = wmItemsSize(record);
@@ -311,6 +339,7 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
       if (widget->value >= widget->numItems) {
         widget->value = WIN_NO_ITEM;
       }
+
       wmShowSelection(window, widget);
       copy = widget->itemsSize;
     } else if (widget->kind == WIN_WIDGET_MENU_BAR) {
@@ -326,23 +355,30 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
       if (widget->textLength > widget->maxLength) {
         widget->textLength = widget->maxLength;
       }
+
       widget->caret = widget->textLength;
     }
+
     if (wmTextStorage(widget) > 0) {
       widget->text = (char*) malloc(wmTextStorage(widget));
       if (widget->text == NULL) {
         wmFreeWidgetTexts(widgets, oldCount);
         free(widgets);
-        wmCharge(state, window->owner, (int32_t) oldBytes - (int32_t) bytes);
+        wmCharge(state, window->owner,
+          ((int32_t) oldBytes) - ((int32_t) bytes));
         return WIN_ERR_NO_MEMORY;
       }
+
       memcpy(widget->text, source, copy + widget->textLength);
     }
+
     widgets->count++;
     at += wmRecordSize(record, size - at, &status);
   }
+
   free(old);
   window->widgets = widgets;
+
   return WIN_OK;
 }
 
@@ -365,6 +401,7 @@ void* wmTemplateAdd(void *args) {
     job->status = wmAddTemplate(job->state, job->window, job->widgets,
       job->size);
   }
+
   return args;
 }
 
@@ -382,6 +419,7 @@ void* wmTemplateFree(void *args) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Resize", "wmResizeFreeGrid",
       job);
   }
+
   WmWidgets *widgets = (WmWidgets*) job->window->widgets;
   if (widgets != NULL) {
     WmCanvasJob discard = { job->state, widgets, 0, widgets->count };
@@ -392,6 +430,7 @@ void* wmTemplateFree(void *args) {
     free(widgets);
     job->window->widgets = NULL;
   }
+
   return args;
 }
 
@@ -409,6 +448,7 @@ void* wmTemplateRequest(void *args) {
   // Every waited widget request's arguments start with its status and window.
   uint8_t *status = (uint8_t*) job->data;
   WmWindow *window = wmFind(state, ((uint8_t*) job->data)[1]);
+
   if (job->type == WIN_MSG_REMOVE_WIDGET) {
     WinWidgetArgs *remove = (WinWidgetArgs*) job->data;
     window = wmFind(state, remove->window);
@@ -417,8 +457,10 @@ void* wmTemplateRequest(void *args) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Property",
         "wmPropertyRequest", job);
     }
+
     return args;
   }
+
   if (window == NULL) {
     *status = WIN_ERR_NOT_FOUND;
   } else if (window->owner != job->pid) {
@@ -442,5 +484,6 @@ void* wmTemplateRequest(void *args) {
   } else {
     *status = WIN_ERR_NOT_SUPPORTED;
   }
+
   return args;
 }

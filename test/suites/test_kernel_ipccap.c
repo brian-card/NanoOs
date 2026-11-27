@@ -190,6 +190,7 @@ static int userApiSend(ProcessDescriptor *target,
   ProcessDescriptor *self = getRunningProcess();
   IpcCapability *savedCapabilities = self->ipcCapabilities;
   size_t savedNumCapabilities = self->numIpcCapabilities;
+
   self->ipcCapabilities = capabilities;
   self->numIpcCapabilities = numCapabilities;
 
@@ -201,6 +202,7 @@ static int userApiSend(ProcessDescriptor *target,
 
   self->ipcCapabilities = savedCapabilities;
   self->numIpcCapabilities = savedNumCapabilities;
+
   return returnValue;
 }
 

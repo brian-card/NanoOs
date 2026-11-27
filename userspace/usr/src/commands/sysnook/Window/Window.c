@@ -47,10 +47,11 @@
 /// @return Returns true if it is, false otherwise.
 static bool wmConnected(WmState *state, ProcessId pid) {
   for (uint8_t ii = 0; ii < state->numClients; ii++) {
-    if ((state->clients[ii]->pid == pid) && !state->clients[ii]->leaving) {
+    if ((state->clients[ii]->pid == pid) && (!state->clients[ii]->leaving)) {
       return true;
     }
   }
+
   return false;
 }
 
@@ -68,14 +69,17 @@ static void wmWorkArea(WmState *state) {
   int16_t top = 0;
   int16_t right = (int16_t) state->display.width;
   int16_t bottom = (int16_t) state->display.height;
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     const WmWindow *window = &state->windows[ii];
     const GfxRect *frame = &window->frame;
+
     if (window->state == WIN_STATE_MINIMIZED) {
       continue;
     }
+
     if (((window->flags & WIN_FLAG_RESERVE_TOP) != 0)
-      && (frame->y + frame->h > top)
+      && ((frame->y + frame->h) > top)
     ) {
       top = frame->y + frame->h;
     }
@@ -85,7 +89,7 @@ static void wmWorkArea(WmState *state) {
       bottom = frame->y;
     }
     if (((window->flags & WIN_FLAG_RESERVE_LEFT) != 0)
-      && (frame->x + frame->w > left)
+      && ((frame->x + frame->w) > left)
     ) {
       left = frame->x + frame->w;
     }
@@ -95,11 +99,14 @@ static void wmWorkArea(WmState *state) {
       right = frame->x;
     }
   }
+
   GfxRect area = { left, top, right - left, bottom - top };
   if (memcmp(&area, &state->workArea, sizeof(area)) == 0) {
     return;
   }
+
   state->workArea = area;
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     WmWindow *window = &state->windows[ii];
     if (window->state == WIN_STATE_MAXIMIZED) {
@@ -130,13 +137,17 @@ static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
   if (old == newState) {
     return;
   }
+
   uint8_t shown = old;
+
   if (old == WIN_STATE_MINIMIZED) {
     shown = window->restoreState;
   } else {
     wmDamage(state, &window->frame);
   }
+
   GfxRect before = window->frame;
+
   if (newState == WIN_STATE_MINIMIZED) {
     window->restoreState = shown;
   } else if ((newState == WIN_STATE_MAXIMIZED)
@@ -149,22 +160,28 @@ static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
   ) {
     window->frame = window->restored;
   }
+
   window->state = newState;
   uint8_t id = window->id;
+
   if (newState != WIN_STATE_MINIMIZED) {
     wmDamage(state, &window->frame);
     wmResized(state, window, &before);
   }
+
   WinEvent *event = wmSend(state, window->owner, WIN_EVENT_STATE, id);
   if (event != NULL) {
     event->detail = newState;
   }
+
   if ((window->flags & (WIN_FLAG_RESERVE_TOP | WIN_FLAG_RESERVE_BOTTOM
     | WIN_FLAG_RESERVE_LEFT | WIN_FLAG_RESERVE_RIGHT)) != 0
   ) {
     wmWorkArea(state);
   }
+
   window = wmFind(state, id);
+
   if (newState == WIN_STATE_MINIMIZED) {
     if ((state->active == id) || (state->focus == id)) {
       wmActivate(state, wmTopNormal(state));
@@ -198,6 +215,7 @@ static uint8_t wmTemplate(WmState *state, WmWindow *window,
   job.size = size;
   job.status = WIN_OK;
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Template", function, &job);
+
   return job.status;
 }
 
@@ -214,7 +232,9 @@ static void wmRemoveWindow(WmState *state, WmWindow *window) {
   if (window->state != WIN_STATE_MINIMIZED) {
     wmDamage(state, &window->frame);
   }
+
   bool lost = (state->active == window->id) || (state->focus == window->id);
+
   if (state->active == window->id) {
     state->active = 0;
   }
@@ -226,13 +246,16 @@ static void wmRemoveWindow(WmState *state, WmWindow *window) {
     state->grabbed = 0;
     memset(&state->outline, 0, sizeof(state->outline));
   }
+
   free(window->title);
   wmTemplate(state, window, "wmTemplateFree", NULL, 0);
   uint8_t index = (uint8_t) (window - state->windows);
+
   state->numWindows--;
   memmove(window, window + 1,
-    sizeof(WmWindow) * (size_t) (state->numWindows - index));
+    sizeof(WmWindow) * ((size_t) (state->numWindows - index)));
   wmWorkArea(state);
+
   if (lost) {
     wmActivate(state, wmTopNormal(state));
   }
@@ -272,11 +295,13 @@ static char* wmCopyTitle(const char *title, uint8_t length) {
   if (length > WIN_TITLE_MAX) {
     length = WIN_TITLE_MAX;
   }
+
   char *copy = (char*) malloc(length + 1);
   if (copy != NULL) {
     memcpy(copy, title, length);
     copy[length] = '\0';
   }
+
   return copy;
 }
 
@@ -291,6 +316,7 @@ static uint8_t wmFreeId(WmState *state) {
   while ((state->nextId == 0) || (wmFind(state, state->nextId) != NULL)) {
     state->nextId++;
   }
+
   return state->nextId++;
 }
 
@@ -305,6 +331,7 @@ static uint8_t wmFreeId(WmState *state) {
 /// @return This function returns no value.
 static void wmLimit(WmState *state, WmWindow *window) {
   GfxRect *frame = &window->frame;
+
   if (window->layer == WIN_LAYER_DESKTOP) {
     frame->x = 0;
     frame->y = 0;
@@ -314,6 +341,7 @@ static void wmLimit(WmState *state, WmWindow *window) {
     if (frame->w < WM_MIN_WIDTH) {
       frame->w = WM_MIN_WIDTH;
     }
+
     if (frame->h < WM_MIN_HEIGHT) {
       frame->h = WM_MIN_HEIGHT;
     }
@@ -335,9 +363,11 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   WinCreateWindowArgs *args
 ) {
   bool desktop = false;
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     desktop |= (state->windows[ii].layer == WIN_LAYER_DESKTOP);
   }
+
   if (state->numWindows == WM_MAX_WINDOWS) {
     args->status = WIN_ERR_NO_MEMORY;
     return;
@@ -357,6 +387,7 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   window.face = WM_FACE;
   window.frame = args->frame;
   wmLimit(state, &window);
+
   if (args->templateSize != 0) {
     args->status = wmTemplate(state, &window, "wmTemplateAdd",
       args->widgets, args->templateSize);
@@ -364,12 +395,14 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
       return;
     }
   }
+
   window.title = wmCopyTitle(args->title, args->titleLength);
   if ((args->titleLength != 0) && (window.title == NULL)) {
     wmTemplate(state, &window, "wmTemplateFree", NULL, 0);
     args->status = WIN_ERR_NO_MEMORY;
     return;
   }
+
   window.id = wmFreeId(state);
 
   uint8_t index = 0;
@@ -378,18 +411,23 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   ) {
     index++;
   }
+
   memmove(&state->windows[index + 1], &state->windows[index],
-    sizeof(WmWindow) * (size_t) (state->numWindows - index));
+    sizeof(WmWindow) * ((size_t) (state->numWindows - index)));
   state->windows[index] = window;
   state->numWindows++;
   wmDamage(state, &window.frame);
+
   if ((window.layer == WIN_LAYER_NORMAL) || (window.layer == WIN_LAYER_POPUP)) {
     wmActivate(state, &state->windows[index]);
   }
+
   wmWorkArea(state);
+
   if (args->state != WIN_STATE_NORMAL) {
     wmSetState(state, wmFind(state, window.id), args->state);
   }
+
   args->window = window.id;
   args->status = WIN_OK;
 }
@@ -416,6 +454,7 @@ static WmWindow* wmOwnWindow(WmState *state, ProcessId pid, uint8_t id,
     *status = WIN_ERR_PERMISSION;
     window = NULL;
   }
+
   return window;
 }
 
@@ -441,13 +480,16 @@ static void wmSetWindow(WmState *state, ProcessId pid,
     args->status = WIN_ERR_INVALID;
     return;
   }
+
   uint8_t id = window->id;
+
   if ((args->changes & WIN_SET_TITLE) != 0) {
     char *title = wmCopyTitle(args->title, args->titleLength);
     if ((args->titleLength != 0) && (title == NULL)) {
       args->status = WIN_ERR_NO_MEMORY;
       return;
     }
+
     free(window->title);
     window->title = title;
     GfxRect bar = { window->frame.x, window->frame.y, window->frame.w,
@@ -465,10 +507,12 @@ static void wmSetWindow(WmState *state, ProcessId pid,
     wmDamage(state, &window->frame);
     wmWorkArea(state);
   }
+
   window = wmFind(state, id);
   if ((window != NULL) && ((args->changes & WIN_SET_STATE) != 0)) {
     wmSetState(state, window, args->state);
   }
+
   args->status = WIN_OK;
 }
 
@@ -483,9 +527,11 @@ static void wmSetWindow(WmState *state, ProcessId pid,
 void* wmWindowSetState(void *args) {
   WmState *state = (WmState*) args;
   WmWindow *window = wmFind(state, state->opWindow);
+
   if (window != NULL) {
     wmSetState(state, window, state->opState);
   }
+
   return args;
 }
 
@@ -499,6 +545,7 @@ void* wmWindowSetState(void *args) {
 void* wmWindowRemoveOwned(void *args) {
   WmState *state = (WmState*) args;
   wmRemoveWindowsOf(state, state->opPid);
+
   return args;
 }
 
@@ -531,6 +578,7 @@ static void wmRequest(WmState *state, ProcessId pid, uint8_t type,
     uint8_t status = WIN_OK;
     WmWindow *window = wmOwnWindow(state, pid,
       ((WinWindowArgs*) data)->window, &status);
+
     if (window != NULL) {
       wmRemoveWindow(state, window);
     }
@@ -560,16 +608,21 @@ void* wmWindowMessage(void *args) {
   ProcessMessage *message = state->message;
   void *data = processMessageData(message);
   bool waiting = processMessageWaiting(message);
+
   if (data != NULL) {
     wmRequest(state, processMessageFrom(message)->processId,
       (uint8_t) processMessageType(message), data, waiting);
+
     if (waiting == false) {
       MESSAGE_ARGS_DESTROY(data);
     }
   }
+
   processMessageSetDone(message);
+
   if (waiting == false) {
     processMessageRelease(message);
   }
+
   return args;
 }

@@ -50,9 +50,9 @@
 static void wmGridBlank(WmGrid *grid, uint8_t row, uint8_t left,
   uint8_t count, uint8_t attribute
 ) {
-  size_t start = (size_t) row * grid->columns + left;
+  size_t start = (((size_t) row) * grid->columns) + left;
   memset(&grid->cells[start], ' ', count);
-  memset(&grid->cells[(size_t) grid->rows * grid->columns + start],
+  memset(&grid->cells[(((size_t) grid->rows) * grid->columns) + start],
     attribute, count);
 }
 
@@ -81,34 +81,43 @@ static void wmGridScroll(WmState *state, WmGrid *grid, uint8_t top,
   if ((top > bottom) || (count == 0)) {
     return;
   }
+
   uint8_t height = bottom - top + 1;
   uint8_t moved = (uint8_t) ((count > 0) ? count : -count);
+
   wmGridDirty(state, grid, grid->cursorRow, grid->cursorRow);
+
   if (moved >= height) {
     for (uint8_t row = top; row <= bottom; row++) {
       wmGridBlank(grid, row, 0, grid->columns, attribute);
     }
+
     wmGridDirty(state, grid, top, bottom);
     return;
   }
 
   size_t columns = grid->columns;
-  size_t plane = (size_t) grid->rows * columns;
-  size_t from = (size_t) (top + moved) * columns;
-  size_t to = (size_t) top * columns;
+  size_t plane = ((size_t) grid->rows) * columns;
+  size_t from = ((size_t) (top + moved)) * columns;
+  size_t to = ((size_t) top) * columns;
+
   if (count < 0) {
     from = to;
-    to = (size_t) (top + moved) * columns;
+    to = ((size_t) (top + moved)) * columns;
   }
-  size_t bytes = (size_t) (height - moved) * columns;
+
+  size_t bytes = ((size_t) (height - moved)) * columns;
   memmove(&grid->cells[to], &grid->cells[from], bytes);
   memmove(&grid->cells[plane + to], &grid->cells[plane + from], bytes);
 
   uint8_t dirty[WM_GRID_DIRTY_BYTES];
   memcpy(dirty, grid->dirty, sizeof(dirty));
+
   for (uint8_t row = top; row <= bottom; row++) {
-    int source = (int) row + count;
+    int source = ((int) row) + count;
+
     grid->dirty[WM_GRID_DIRTY_BYTE(row)] &= (uint8_t) ~WM_GRID_DIRTY_BIT(row);
+
     if ((source < top) || (source > bottom)) {
       wmGridBlank(grid, row, 0, grid->columns, attribute);
       wmGridDirty(state, grid, row, row);
@@ -118,9 +127,11 @@ static void wmGridScroll(WmState *state, WmGrid *grid, uint8_t top,
       wmGridDirty(state, grid, row, row);
     }
   }
+
   wmGridDirty(state, grid, grid->cursorRow, grid->cursorRow);
 
   int total = grid->scroll + count;
+
   if (grid->noBlit) {
     wmGridDirty(state, grid, top, bottom);
   } else if (grid->scroll == 0) {
@@ -129,13 +140,14 @@ static void wmGridScroll(WmState *state, WmGrid *grid, uint8_t top,
     grid->scrollBottom = bottom;
   } else if ((top == grid->scrollTop) && (bottom == grid->scrollBottom)
     && ((grid->scroll > 0) == (count > 0)) && (total < height)
-    && (total > -height)
+    && (total > (-height))
   ) {
     grid->scroll = (int8_t) total;
   } else {
     grid->noBlit = true;
     wmGridDirty(state, grid, top, bottom);
   }
+
   state->gridsDirty = true;
 }
 
@@ -161,8 +173,9 @@ static uint8_t wmGridApply(WmState *state, WmGrid *grid,
     const uint8_t *op = &data[at];
     uint16_t remaining = size - at;
     uint16_t length = WIN_GRID_REPORTS_SIZE;
+
     if (op[WIN_GRID_TAG] == WIN_GRID_PUT) {
-      length = (remaining < WIN_GRID_PUT_SIZE(0)) ? remaining + 1
+      length = (remaining < WIN_GRID_PUT_SIZE(0)) ? (remaining + 1)
         : WIN_GRID_PUT_SIZE(op[WIN_GRID_PUT_LENGTH]);
     } else if (op[WIN_GRID_TAG] == WIN_GRID_CLEAR) {
       length = WIN_GRID_CLEAR_SIZE;
@@ -173,24 +186,29 @@ static uint8_t wmGridApply(WmState *state, WmGrid *grid,
     } else if (op[WIN_GRID_TAG] != WIN_GRID_REPORTS) {
       return WIN_ERR_INVALID;
     }
+
     if (length > remaining) {
       return WIN_ERR_INVALID;
     }
+
     at += length;
 
     if (op[WIN_GRID_TAG] == WIN_GRID_PUT) {
       uint8_t row = op[WIN_GRID_PUT_ROW];
       uint8_t column = op[WIN_GRID_PUT_COLUMN];
+
       if ((row >= grid->rows) || (column >= grid->columns)) {
         continue;
       }
+
       uint8_t count = op[WIN_GRID_PUT_LENGTH];
-      if (count > grid->columns - column) {
+      if (count > (grid->columns - column)) {
         count = grid->columns - column;
       }
-      size_t start = (size_t) row * grid->columns + column;
+
+      size_t start = (((size_t) row) * grid->columns) + column;
       memcpy(&grid->cells[start], &op[WIN_GRID_PUT_TEXT], count);
-      memset(&grid->cells[(size_t) grid->rows * grid->columns + start],
+      memset(&grid->cells[(((size_t) grid->rows) * grid->columns) + start],
         op[WIN_GRID_PUT_ATTRIBUTE], count);
       wmGridDirty(state, grid, row, row);
     } else if (op[WIN_GRID_TAG] == WIN_GRID_CLEAR) {
@@ -198,16 +216,20 @@ static uint8_t wmGridApply(WmState *state, WmGrid *grid,
       uint8_t left = op[WIN_GRID_CLEAR_LEFT];
       uint8_t bottom = op[WIN_GRID_CLEAR_BOTTOM];
       uint8_t right = op[WIN_GRID_CLEAR_RIGHT];
+
       if (bottom >= grid->rows) {
         bottom = grid->rows - 1;
       }
+
       if (right >= grid->columns) {
         right = grid->columns - 1;
       }
+
       for (uint8_t row = top; (row <= bottom) && (left <= right); row++) {
         wmGridBlank(grid, row, left, right - left + 1,
           op[WIN_GRID_CLEAR_ATTRIBUTE]);
       }
+
       wmGridDirty(state, grid, top, bottom);
     } else if (op[WIN_GRID_TAG] == WIN_GRID_SCROLL) {
       wmGridScroll(state, grid, op[WIN_GRID_SCROLL_TOP],
@@ -227,6 +249,7 @@ static uint8_t wmGridApply(WmState *state, WmGrid *grid,
       }
     }
   }
+
   return WIN_OK;
 }
 
@@ -242,9 +265,11 @@ static uint8_t wmGridApply(WmState *state, WmGrid *grid,
 static void wmGridWrite(WmState *state, ProcessMessage *message) {
   WinBufferArgs *bufferArgs = (WinBufferArgs*) processMessageData(message);
   bool waiting = processMessageWaiting(message);
+
   if ((bufferArgs != NULL) && waiting) {
     WmWindow *window = wmFind(state, bufferArgs->window);
     WmGrid *grid = NULL;
+
     if (window != NULL) {
       grid = (WmGrid*) window->content;
     }
@@ -263,7 +288,9 @@ static void wmGridWrite(WmState *state, ProcessMessage *message) {
   } else if (bufferArgs != NULL) {
     MESSAGE_ARGS_DESTROY(bufferArgs);
   }
+
   processMessageSetDone(message);
+
   if (waiting == false) {
     processMessageRelease(message);
   }
@@ -280,10 +307,13 @@ static void wmGridWrite(WmState *state, ProcessMessage *message) {
 /// @return This function returns no value.
 static void wmGridEnded(WmState *state, ProcessMessage *message) {
   uint8_t port = (uint8_t) (uintptr_t) processMessageData(message);
+
   processMessageRelease(message);
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     WmWindow *window = &state->windows[ii];
     WmGrid *grid = (WmGrid*) window->content;
+
     if ((grid != NULL) && (grid->port == port)) {
       wmGridUnbind(grid);
       WinEvent *event = wmSend(state, window->owner,
@@ -304,10 +334,10 @@ static void wmGridEnded(WmState *state, ProcessMessage *message) {
 ///
 /// @return Returns true if they do, false otherwise.
 static bool overlaps(const GfxRect *first, const GfxRect *second) {
-  return (first->x < second->x + second->w)
-    && (second->x < first->x + first->w)
-    && (first->y < second->y + second->h)
-    && (second->y < first->y + first->h);
+  return (first->x < (second->x + second->w))
+    && (second->x < (first->x + first->w))
+    && (first->y < (second->y + second->h))
+    && (second->y < (first->y + first->h));
 }
 
 /// @fn static bool blittable(WmState *state, uint8_t index,
@@ -326,11 +356,12 @@ static bool overlaps(const GfxRect *first, const GfxRect *second) {
 static bool blittable(WmState *state, uint8_t index, const GfxRect *band) {
   if (state->paintAll || state->copy || (state->grab != WM_GRAB_NONE)
     || (state->outlineShown.w != 0) || (band->x < 0) || (band->y < 0)
-    || (band->x + band->w > (int16_t) state->display.width)
-    || (band->y + band->h > (int16_t) state->display.height)
+    || ((band->x + band->w) > ((int16_t) state->display.width))
+    || ((band->y + band->h) > ((int16_t) state->display.height))
   ) {
     return false;
   }
+
   for (uint8_t ii = index + 1; ii < state->numWindows; ii++) {
     if ((state->windows[ii].state != WIN_STATE_MINIMIZED)
       && overlaps(&state->windows[ii].frame, band)
@@ -338,11 +369,13 @@ static bool blittable(WmState *state, uint8_t index, const GfxRect *band) {
       return false;
     }
   }
+
   for (uint8_t ii = 0; ii < state->numDamage; ii++) {
     if (overlaps(&state->damage[ii], band)) {
       return false;
     }
   }
+
   return true;
 }
 
@@ -359,26 +392,32 @@ static bool blittable(WmState *state, uint8_t index, const GfxRect *band) {
 static void wmGridPrepare(WmState *state) {
   uint8_t glyphW = state->display.builtInFont.glyphW;
   uint8_t glyphH = state->display.builtInFont.glyphH;
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     WmWindow *window = &state->windows[ii];
     WmGrid *grid = (WmGrid*) window->content;
+
     if (grid == NULL) {
       continue;
     }
+
     bool shown = (window->state != WIN_STATE_MINIMIZED);
     GfxRect rows = { window->frame.x + grid->left, window->frame.y + grid->top,
       (int16_t) (grid->columns * glyphW), 0 };
+
     if (grid->scroll != 0) {
       GfxRect band = rows;
       band.y += (int16_t) (grid->scrollTop * glyphH);
       band.h = (int16_t) ((grid->scrollBottom - grid->scrollTop + 1) * glyphH);
       int16_t distance = (int16_t) (grid->scroll * glyphH);
-      if (!grid->noBlit && shown && blittable(state, ii, &band)) {
+
+      if ((!grid->noBlit) && shown && blittable(state, ii, &band)) {
         state->copy = true;
         state->copySource = band;
         state->copySource.h -= (distance < 0) ? -distance : distance;
         state->copyTarget.x = band.x;
         state->copyTarget.y = band.y;
+
         if (distance > 0) {
           state->copySource.y += distance;
         } else {
@@ -387,18 +426,22 @@ static void wmGridPrepare(WmState *state) {
       } else {
         wmGridDirty(state, grid, grid->scrollTop, grid->scrollBottom);
       }
+
       grid->scroll = 0;
       grid->noBlit = false;
     }
+
     uint8_t row = 0;
     while (shown && (row < grid->rows)) {
       uint8_t first = row;
+
       while ((row < grid->rows)
         && ((grid->dirty[WM_GRID_DIRTY_BYTE(row)] & WM_GRID_DIRTY_BIT(row))
           != 0)
       ) {
         row++;
       }
+
       if (row > first) {
         GfxRect damage = rows;
         damage.y += (int16_t) (first * glyphH);
@@ -406,10 +449,13 @@ static void wmGridPrepare(WmState *state) {
         wmDamageOwned(state, &damage, window->id);
         state->gridPainted = true;
       }
+
       row++;
     }
+
     memset(grid->dirty, 0, sizeof(grid->dirty));
   }
+
   state->gridsDirty = false;
 }
 
@@ -430,7 +476,9 @@ void* wmGrid(void *args) {
   WmState *state = (WmState*) args;
   ProcessMessage *message = state->message;
   bool written = false;
+
   state->deferring = false;
+
   if (message != NULL) {
     written = (processMessageType(message)
       == (WIN_COMMAND_SIGNATURE | WIN_MSG_GRID_WRITE));
@@ -440,8 +488,10 @@ void* wmGrid(void *args) {
       wmGridEnded(state, message);
     }
   }
+
   if (state->gridsResized) {
     state->gridsResized = false;
+
     for (uint8_t ii = 0; ii < state->numWindows; ii++) {
       WmWindow *window = &state->windows[ii];
       if ((window->content != NULL)
@@ -455,14 +505,17 @@ void* wmGrid(void *args) {
       }
     }
   }
+
   if (written && state->gridsDirty && (state->deferred < WM_MAX_DEFERRED)) {
     struct timespec soon;
     timespec_get(&soon, TIME_UTC);
     soon.tv_nsec += WM_WRITE_WAIT_NS;
+
     if (soon.tv_nsec >= 1000000000L) {
       soon.tv_sec++;
       soon.tv_nsec -= 1000000000L;
     }
+
     state->next = processMessageQueueWait(&soon);
     if (state->next != NULL) {
       state->deferred++;
@@ -470,7 +523,9 @@ void* wmGrid(void *args) {
       return args;
     }
   }
+
   state->deferred = 0;
   wmGridPrepare(state);
+
   return args;
 }

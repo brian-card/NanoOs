@@ -86,13 +86,15 @@ void* wintestChange(void *args) {
   int ii = wintest->index;
   const char *command = argv[ii];
   int next = -1;
+
   if ((strcmp(command, "window") == 0)
-    && (ii + 2 < wintest->argc)
+    && ((ii + 2) < wintest->argc)
   ) {
     GfxRect frame;
     WinTemplate *widgets = pending(wintest);
     char *title = spaced(argv[ii + 2]);
     int window = -EINVAL;
+
     if ((widgets == NULL) || (title == NULL)) {
       window = -ENOMEM;
     } else if (parseRect(argv[ii + 1], &frame)) {
@@ -101,31 +103,40 @@ void* wintestChange(void *args) {
         | WIN_FLAG_IN_TASKBAR, widgets->buffer, widgets->size);
       reset(wintest);
     }
+
     free(title);
+
     if (window < 0) {
       report(command, argv[ii + 1], window);
     } else {
       printf("wintest: window %d\n", window);
       wintest->last = (uint8_t) window;
     }
+
     next = ii + 3;
   } else if ((next < 0) && (strcmp(command, "add") == 0)
-    && (ii + 1 < wintest->argc)
+    && ((ii + 1) < wintest->argc)
   ) {
     WinTemplate *widgets = pending(wintest);
     int rc = -ENOMEM;
+
     if (widgets != NULL) {
       rc = winAddWidgets(&wintest->session,
         (uint8_t) strtol(argv[ii + 1], NULL, 0), widgets);
       reset(wintest);
     }
+
     report(command, argv[ii + 1], rc);
     next = ii + 2;
   }
+
   wintest->handled = (next >= 0);
+
   if (next < 0) {
     return args;
   }
+
   wintest->index = next;
+
   return args;
 }

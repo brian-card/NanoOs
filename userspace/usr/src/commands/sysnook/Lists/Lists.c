@@ -106,18 +106,21 @@ static void wmListLayout(const WmWidget *list, const GfxRect *rect,
   layout->bar = (list->numItems > layout->rows);
   layout->maxTop = 0;
   layout->rowsWidth = rect->w - 2;
+
   if (!layout->bar) {
     return;
   }
+
   layout->maxTop = (uint16_t) (list->numItems - layout->rows);
   layout->rowsWidth -= WM_SCROLL_BAR_WIDTH;
   layout->barX = rect->x + rect->w - 1 - WM_SCROLL_BAR_WIDTH;
   layout->trackTop = rect->y + 1 + WM_SCROLL_BAR_WIDTH;
-  layout->trackLength = rect->h - 2 - 2 * WM_SCROLL_BAR_WIDTH;
+  layout->trackLength = rect->h - 2 - (2 * WM_SCROLL_BAR_WIDTH);
   if (layout->trackLength < 0) {
     layout->trackLength = 0;
   }
-  layout->thumbLength = (int16_t) (((int32_t) layout->trackLength
+
+  layout->thumbLength = (int16_t) ((((int32_t) layout->trackLength)
     * layout->rows) / list->numItems);
   if (layout->thumbLength < WM_THUMB_MIN) {
     layout->thumbLength = WM_THUMB_MIN;
@@ -125,12 +128,14 @@ static void wmListLayout(const WmWidget *list, const GfxRect *rect,
   if (layout->thumbLength > layout->trackLength) {
     layout->thumbLength = layout->trackLength;
   }
+
   uint16_t top = list->top;
   if (top > layout->maxTop) {
     top = layout->maxTop;
   }
-  layout->thumbTop = layout->trackTop + (int16_t) (((int32_t)
-    (layout->trackLength - layout->thumbLength) * top) / layout->maxTop);
+
+  layout->thumbTop = layout->trackTop + ((int16_t) ((((int32_t)
+    (layout->trackLength - layout->thumbLength)) * top) / layout->maxTop));
 }
 
 /// @fn static void wmFill(GfxCmdBuf *cmd, GfxColor color, int16_t left,
@@ -150,6 +155,7 @@ static void wmFill(GfxCmdBuf *cmd, GfxColor color, int16_t left,
   int16_t top, int16_t width, int16_t height
 ) {
   GfxRect rect = { left, top, width, height };
+
   gfxCmdSetFgColor(cmd, color);
   gfxCmdDrawRect(cmd, &rect, true);
 }
@@ -171,6 +177,7 @@ static void wmOutline(GfxCmdBuf *cmd, GfxColor color, int16_t left,
   int16_t top, int16_t width, int16_t height
 ) {
   GfxRect rect = { left, top, width, height };
+
   gfxCmdSetFgColor(cmd, color);
   gfxCmdDrawRect(cmd, &rect, false);
 }
@@ -190,10 +197,11 @@ static void wmOutline(GfxCmdBuf *cmd, GfxColor color, int16_t left,
 static void wmArrow(GfxCmdBuf *cmd, int16_t barX, int16_t boxTop, bool up) {
   wmOutline(cmd, WM_DARK, barX, boxTop, WM_SCROLL_BAR_WIDTH,
     WM_SCROLL_BAR_WIDTH);
+
   for (int16_t row = 0; row < WM_ARROW_ROWS; row++) {
     int16_t half = up ? row : (WM_ARROW_ROWS - 1 - row);
     wmFill(cmd, WM_DARK, barX + WM_ARROW_CENTER - half,
-      boxTop + WM_ARROW_TOP + row, 2 * half + 1, 1);
+      boxTop + WM_ARROW_TOP + row, (2 * half) + 1, 1);
   }
 }
 
@@ -216,44 +224,54 @@ static void wmListPaint(WmWidgetJob *job) {
   uint8_t glyphH = state->display.builtInFont.glyphH;
   bool enabled = (list->flags & WIN_WIDGET_DISABLED) == 0;
   WmListLayout layout;
+
   wmListLayout(list, rect, &layout);
   wmFill(cmd, WM_FACE, rect->x, rect->y, rect->w, rect->h);
   int16_t textLeft = rect->x + 1 + WM_LIST_TEXT_INSET;
   int16_t fits = (layout.rowsWidth - WM_LIST_TEXT_INSET) / glyphW;
+
   if (fits > UINT8_MAX) {
     fits = UINT8_MAX;
   }
+
   for (uint16_t row = 0; row < layout.rows; row++) {
     uint16_t index = list->top + row;
     if (index >= list->numItems) {
       break;
     }
-    int16_t rowTop = rect->y + 1 + (int16_t) (row * WM_LIST_ITEM_HEIGHT);
+
+    int16_t rowTop = rect->y + 1 + ((int16_t) (row * WM_LIST_ITEM_HEIGHT));
     GfxColor ink = enabled ? WM_TEXT : WM_DARK;
+
     if (enabled && (index == list->value)) {
       wmFill(cmd, WM_ACCENT, rect->x + 1, rowTop, layout.rowsWidth,
         WM_LIST_ITEM_HEIGHT);
       ink = WM_ON_ACCENT;
     }
+
     uint16_t length = 0;
     const char *text = wmItem(list, index, &length);
-    if ((int16_t) length > fits) {
+
+    if (((int16_t) length) > fits) {
       length = (uint16_t) fits;
     }
     if (length == 0) {
       continue;
     }
+
     gfxCmdSetFgColor(cmd, ink);
     uint8_t *record = gfxCmdBufReserve_(cmd, GFX_CMD_DRAW_TEXT_SIZE(length));
     if (record != NULL) {
       GfxPoint at = { textLeft,
-        rowTop + (WM_LIST_ITEM_HEIGHT - glyphH) / 2 };
+        rowTop + ((WM_LIST_ITEM_HEIGHT - glyphH) / 2) };
+
       record[GFX_CMD_TAG] = GFX_CMD_DRAW_TEXT;
       memcpy(&record[GFX_CMD_DRAW_TEXT_AT], &at, sizeof(at));
       record[GFX_CMD_DRAW_TEXT_LENGTH] = (uint8_t) length;
       memcpy(&record[GFX_CMD_DRAW_TEXT_TEXT], text, length);
     }
   }
+
   if (layout.bar) {
     wmFill(cmd, WM_LIGHT, layout.barX, rect->y + 1, WM_SCROLL_BAR_WIDTH,
       rect->h - 2);
@@ -263,6 +281,7 @@ static void wmListPaint(WmWidgetJob *job) {
     wmFill(cmd, WM_DARK, layout.barX + 1, layout.thumbTop,
       WM_SCROLL_BAR_WIDTH - 2, layout.thumbLength);
   }
+
   wmOutline(cmd, job->focused ? WM_ACCENT : WM_DARK, rect->x, rect->y,
     rect->w, rect->h);
 }
@@ -278,12 +297,14 @@ static void wmListPaint(WmWidgetJob *job) {
 static void wmScrollTo(WmWidgetJob *job, int32_t top) {
   WmListLayout layout;
   wmListLayout(job->widget, &job->rect, &layout);
+
   if (top > layout.maxTop) {
     top = layout.maxTop;
   }
   if (top < 0) {
     top = 0;
   }
+
   job->widget->top = (uint16_t) top;
 }
 
@@ -308,9 +329,12 @@ static void wmSelect(WmWidgetJob *job, int32_t index) {
   if (index < 0) {
     index = 0;
   }
+
   uint16_t old = list->value;
+
   list->value = (uint16_t) index;
   wmShowSelection(job->window, list);
+
   if (list->value != old) {
     wmChanged(job->state, job->window, list, list->value);
   }
@@ -329,6 +353,7 @@ static void wmCommand(WmWidgetJob *job) {
   if (list->value == WIN_NO_ITEM) {
     return;
   }
+
   WinEvent *event = wmSend(job->state, job->window->owner,
     WIN_EVENT_COMMAND, job->window->id);
   if (event != NULL) {
@@ -352,33 +377,42 @@ static void wmListPress(WmWidgetJob *job) {
   int16_t pointX = job->event->x;
   int16_t pointY = job->event->y;
   WmListLayout layout;
+
   wmListLayout(list, rect, &layout);
   int32_t top = list->top;
+
   if (layout.bar && (pointX >= layout.barX)) {
     if (pointY < layout.trackTop) {
       top--;
-    } else if (pointY >= layout.trackTop + layout.trackLength) {
+    } else if (pointY >= (layout.trackTop + layout.trackLength)) {
       top++;
     } else if (pointY < layout.thumbTop) {
       top -= layout.rows;
-    } else if (pointY >= layout.thumbTop + layout.thumbLength) {
+    } else if (pointY >= (layout.thumbTop + layout.thumbLength)) {
       top += layout.rows;
     }
+
     wmScrollTo(job, top);
     return;
   }
+
   int16_t offset = pointY - rect->y;
   if (offset < 1) {
     return;
   }
+
   uint16_t row = (uint16_t) ((offset - 1) / WM_LIST_ITEM_HEIGHT);
   uint32_t index = top + row;
+
   if ((row >= layout.rows) || (index >= list->numItems)) {
     return;
   }
+
   bool again = wmDoubleClick(job->state, job->window, pointX, pointY)
     && (index == list->value);
+
   wmSelect(job, (int32_t) index);
+
   if (again) {
     wmCommand(job);
   }
@@ -398,9 +432,11 @@ static void wmListKey(WmWidgetJob *job) {
   WmWidget *list = job->widget;
   uint8_t key = job->event->keycode;
   WmListLayout layout;
+
   wmListLayout(list, &job->rect, &layout);
   int32_t index = (list->value == WIN_NO_ITEM) ? -1 : list->value;
   int32_t page = layout.rows;
+
   if ((key == GFX_KEY_UP) || (key == GFX_KEY_PAGE_UP)) {
     page = -page;
   }
@@ -411,7 +447,9 @@ static void wmListKey(WmWidgetJob *job) {
   ) {
     return;
   }
+
   job->handled = true;
+
   if (job->event->down == 0) {
     return;
   } else if (key == GFX_KEY_ENTER) {
@@ -426,10 +464,11 @@ static void wmListKey(WmWidgetJob *job) {
     } else {
       index += (page < 0) ? -1 : 1;
     }
+
     wmSelect(job, index);
   } else {
-    wmScrollTo(job, (int32_t) list->top + page);
-    wmSelect(job, (index < 0) ? 0 : index + page);
+    wmScrollTo(job, ((int32_t) list->top) + page);
+    wmSelect(job, (index < 0) ? 0 : (index + page));
   }
 }
 
@@ -442,6 +481,7 @@ static void wmListKey(WmWidgetJob *job) {
 /// @return Always returns the provided pointer.
 void* wmListsPaint(void *args) {
   wmListPaint((WmWidgetJob*) args);
+
   return args;
 }
 
@@ -457,18 +497,21 @@ void* wmListsPaint(void *args) {
 void* wmListsInput(void *args) {
   WmWidgetJob *job = (WmWidgetJob*) args;
   const GfxEvent *event = job->event;
+
   if (event->type == GFX_EVENT_KEY) {
     wmListKey(job);
   } else if ((event->buttons & GFX_BUTTON_LEFT) != 0) {
     wmListPress(job);
     job->handled = true;
   } else {
-    wmScrollTo(job, (int32_t) job->widget->top
-      - (int32_t) event->wheel * WM_WHEEL_ROWS);
+    wmScrollTo(job, ((int32_t) job->widget->top)
+      - (((int32_t) event->wheel) * WM_WHEEL_ROWS));
     job->handled = true;
   }
+
   if (job->handled) {
     wmDamageWidget(job->state, job->window, job->widget);
   }
+
   return args;
 }

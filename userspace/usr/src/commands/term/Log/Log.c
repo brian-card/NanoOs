@@ -84,18 +84,22 @@ static void logLine(const char *line) {
   char old[TERM_LOG_PATH_SIZE + sizeof(TERM_LOG_OLD_SUFFIX) - 1];
   // The directory's path leaves room for the file's name to be added.
   size_t room = sizeof(path) - (sizeof(TERM_LOG_FILE) - 1);
+
   if ((home == NULL)
-    || (snprintf(path, room, "%s" TERM_LOG_DIRECTORY, home) >= (int) room)
+    || (snprintf(path, room, "%s" TERM_LOG_DIRECTORY, home) >= ((int) room))
   ) {
     return;
   }
+
   mkdir(path, 0700);
   strncat(path, TERM_LOG_FILE, sizeof(path) - strlen(path) - 1);
   FILE *file = fopen(path, "a");
   if (file == NULL) {
     return;
   }
+
   fseek(file, 0, SEEK_END);
+
   if (ftell(file) > TERM_LOG_LIMIT) {
     fclose(file);
     snprintf(old, sizeof(old), "%s" TERM_LOG_OLD_SUFFIX, path);
@@ -106,6 +110,7 @@ static void logLine(const char *line) {
       return;
     }
   }
+
   fputs(line, file);
   fclose(file);
 }
@@ -122,10 +127,12 @@ void* termLog(void *args) {
   Term *term = (Term*) args;
   char line[TERM_LOG_LINE + TERM_LOG_PREFIX_SIZE];
   struct timespec now;
+
   timespec_get(&now, TIME_UTC);
   snprintf(line, sizeof(line), "%lu %d %s\n", (unsigned long) now.tv_sec,
     (int) getpid(), term->message);
   logLine(line);
   fprintf(stderr, "term: %s\n", term->message);
+
   return args;
 }

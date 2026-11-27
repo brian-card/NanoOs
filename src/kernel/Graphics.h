@@ -185,19 +185,24 @@ GFX_OUT_OF_LINE GfxError gfxCall_(GfxDisplay *disp, uint8_t type,
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   *((uint8_t*) args) = GFX_ERR_DEVICE_LOST;
   ProcessMessage *message = getAvailableMessage();
   if (message == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   processMessageInit(message, GFX_COMMAND_SIGNATURE | type,
     args, size, /* waiting= */ true);
+
   if (sendProcessMessageToPid(disp->driverPid, message) != processSuccess) {
     processMessageRelease(message);
     return GFX_ERR_DEVICE_LOST;
   }
+
   processMessageWaitForDone(message, NULL);
   processMessageRelease(message);
+
   return (GfxError) *((uint8_t*) args);
 }
 
@@ -220,20 +225,25 @@ GFX_OUT_OF_LINE GfxError gfxPost_(GfxDisplay *disp, uint8_t type,
 ) {
   GfxError status = GFX_ERR_OUT_OF_MEMORY;
   ProcessMessage *message = getAvailableMessage();
+
   if (message != NULL) {
     processMessageInit(message, GFX_COMMAND_SIGNATURE | type,
       args, size, /* waiting= */ false);
+
     if (sendProcessMessageToPid(disp->driverPid, message)
       == processSuccess
     ) {
       return GFX_OK;
     }
+
     processMessageRelease(message);
     status = GFX_ERR_DEVICE_LOST;
   }
+
   if (args != NULL) {
     MESSAGE_ARGS_DESTROY(args);
   }
+
   return status;
 }
 
@@ -256,7 +266,9 @@ GFX_OUT_OF_LINE GfxError gfxPostHandle_(GfxDisplay *disp,
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   args->handle = handle;
+
   return gfxPost_(disp, type, args, sizeof(*args));
 }
 
@@ -283,13 +295,16 @@ static inline GfxError gfxOpenDisplay(GfxDisplay *disp,
     disp->driverPid = PROCESS_ID_NOT_SET;
     return GFX_ERR_DEVICE_LOST;
   }
+
   disp->driverPid = driverPid;
 
   MESSAGE_ARGS_ALLOCATE(GfxOpenDisplayArgs, args);
+
   if (args != NULL) {
     args->width  = width;
     args->height = height;
   }
+
   GfxError status = gfxCall_(disp, GFX_MSG_OPEN_DISPLAY,
     args, sizeof(*args));
   if (status == GFX_OK) {
@@ -300,7 +315,9 @@ static inline GfxError gfxOpenDisplay(GfxDisplay *disp,
     disp->builtInFont.firstChar = args->defaultFontFirst;
     disp->builtInFont.numChars  = args->defaultFontCount;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -314,8 +331,10 @@ static inline GfxError gfxOpenDisplay(GfxDisplay *disp,
 /// @return Returns the result of gfxPost_.
 static inline GfxError gfxCloseDisplay(GfxDisplay *disp) {
   GfxError status = gfxPost_(disp, GFX_MSG_CLOSE_DISPLAY, NULL, 0);
+
   disp->fontCount   = 0;
   disp->defaultFont = GFX_INVALID_HANDLE;
+
   return status;
 }
 
@@ -340,10 +359,14 @@ static inline GfxError gfxGetSurfaceSize(GfxDisplay *disp,
   if (status == GFX_OK) {
     disp->width  = args->width;
     disp->height = args->height;
+
     if (outWidth)  *outWidth  = args->width;
+
     if (outHeight) *outHeight = args->height;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -363,9 +386,11 @@ static inline GfxError gfxUploadImage(GfxDisplay *disp,
 ) {
   *outImage = GFX_INVALID_HANDLE;
   MESSAGE_ARGS_ALLOCATE(GfxUploadImageArgs, args);
+
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   args->format = (uint8_t) desc->format;
   args->width  = desc->width;
   args->height = desc->height;
@@ -373,15 +398,19 @@ static inline GfxError gfxUploadImage(GfxDisplay *disp,
   args->pixels = MESSAGE_BUFFER_SHARE(desc->pixels, desc->size,
     MESSAGE_BUFFER_IN, disp->driverPid);
   GfxError status = GFX_ERR_OUT_OF_MEMORY;
+
   if ((args->pixels != NULL) || (desc->pixels == NULL)) {
     status = gfxCall_(disp, GFX_MSG_UPLOAD_IMAGE, args, sizeof(*args));
     MESSAGE_BUFFER_UNSHARE(args->pixels, desc->pixels,
       MESSAGE_BUFFER_IN);
   }
+
   if (status == GFX_OK) {
     *outImage = args->handle;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -398,6 +427,7 @@ static inline GfxError gfxDestroyImage(GfxDisplay *disp, GfxHandle image) {
   if (image == GFX_INVALID_HANDLE) {
     return GFX_OK;
   }
+
   return gfxPostHandle_(disp, GFX_MSG_DESTROY_IMAGE, image);
 }
 
@@ -417,16 +447,21 @@ static inline GfxError gfxGetImageSize(GfxDisplay *disp, GfxHandle image,
   uint16_t *outW, uint16_t *outH
 ) {
   MESSAGE_ARGS_ALLOCATE(GfxImageSizeArgs, args);
+
   if (args != NULL) {
     args->handle = image;
   }
+
   GfxError status = gfxCall_(disp, GFX_MSG_GET_IMAGE_SIZE,
     args, sizeof(*args));
   if (status == GFX_OK) {
     if (outW) *outW = args->width;
+
     if (outH) *outH = args->height;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -447,15 +482,19 @@ static inline GfxError gfxCaptureRect(GfxDisplay *disp, const GfxRect *rect,
 ) {
   *outImage = GFX_INVALID_HANDLE;
   MESSAGE_ARGS_ALLOCATE(GfxCaptureRectArgs, args);
+
   if (args != NULL) {
     args->rect = *rect;
   }
+
   GfxError status = gfxCall_(disp, GFX_MSG_CAPTURE_RECT,
     args, sizeof(*args));
   if (status == GFX_OK) {
     *outImage = args->handle;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -479,11 +518,13 @@ GFX_OUT_OF_LINE GfxFontCacheEntry* gfxFontEntry_(
       return &disp->builtInFont;
     }
   }
+
   for (uint8_t ii = 0; ii < disp->fontCount; ii++) {
     if (disp->fontCache[ii].handle == font) {
       return &disp->fontCache[ii];
     }
   }
+
   return NULL;
 }
 
@@ -504,13 +545,17 @@ static inline GfxError gfxUploadFont(GfxDisplay *disp,
   const GfxFontDesc *desc, GfxHandle *outFont
 ) {
   *outFont = GFX_INVALID_HANDLE;
+
   if (disp->fontCount >= GFX_MAX_FONTS) {
     return GFX_ERR_OUT_OF_HANDLES;
   }
+
   MESSAGE_ARGS_ALLOCATE(GfxUploadFontArgs, args);
+
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   args->glyphW    = desc->glyphW;
   args->glyphH    = desc->glyphH;
   args->firstChar = desc->firstChar;
@@ -519,11 +564,13 @@ static inline GfxError gfxUploadFont(GfxDisplay *disp,
   args->bitmap    = MESSAGE_BUFFER_SHARE(desc->bitmap, desc->size,
     MESSAGE_BUFFER_IN, disp->driverPid);
   GfxError status = GFX_ERR_OUT_OF_MEMORY;
+
   if ((args->bitmap != NULL) || (desc->bitmap == NULL)) {
     status = gfxCall_(disp, GFX_MSG_UPLOAD_FONT, args, sizeof(*args));
     MESSAGE_BUFFER_UNSHARE(args->bitmap, desc->bitmap,
       MESSAGE_BUFFER_IN);
   }
+
   if (status == GFX_OK) {
     GfxFontCacheEntry *entry = &disp->fontCache[disp->fontCount++];
     entry->handle    = args->handle;
@@ -533,7 +580,9 @@ static inline GfxError gfxUploadFont(GfxDisplay *disp,
     entry->numChars  = desc->numChars;
     *outFont     = args->handle;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -559,12 +608,14 @@ static inline GfxError gfxDestroyFont(GfxDisplay *disp, GfxHandle font) {
 
   for (uint8_t ii = 0; ii < disp->fontCount; ii++) {
     if (disp->fontCache[ii].handle == font) {
-      for (uint8_t jj = ii; jj + 1 < disp->fontCount; jj++)
+      for (uint8_t jj = ii; (jj + 1) < disp->fontCount; jj++)
         disp->fontCache[jj] = disp->fontCache[jj + 1];
+
       disp->fontCount--;
       break;
     }
   }
+
   return gfxPostHandle_(disp, GFX_MSG_DESTROY_FONT, font);
 }
 
@@ -580,15 +631,19 @@ static inline GfxError gfxDestroyFont(GfxDisplay *disp, GfxHandle font) {
 /// @return Returns the driver's status.
 static inline GfxError gfxSetDefaultFont(GfxDisplay *disp, GfxHandle font) {
   MESSAGE_ARGS_ALLOCATE(GfxSetDefaultFontArgs, args);
+
   if (args != NULL) {
     args->handle = font;
   }
+
   GfxError status = gfxCall_(disp, GFX_MSG_SET_DEFAULT_FONT,
     args, sizeof(*args));
   if (status == GFX_OK) {
     disp->defaultFont = font;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -622,6 +677,7 @@ static inline void gfxGetGlyphSize(GfxDisplay *disp, GfxHandle font,
 ) {
   GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
   if (outW) *outW = (entry != NULL) ? entry->glyphW : 0;
+
   if (outH) *outH = (entry != NULL) ? entry->glyphH : 0;
 }
 
@@ -640,8 +696,10 @@ static inline uint16_t gfxMeasureText(GfxDisplay *disp, GfxHandle font,
 ) {
   GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
   if ((str == NULL) || (entry == NULL)) return 0;
+
   size_t len = strlen(str);
   if (len > UINT16_MAX) len = UINT16_MAX;
+
   return gfxSaturate_(((uint32_t) len) * entry->glyphW);
 }
 
@@ -667,21 +725,27 @@ static inline bool gfxMeasureTextSize(GfxDisplay *disp, GfxHandle font,
   uint32_t maxLineLen = 0;
   uint32_t curLineLen = 0;
   uint32_t lines = 1;
+
   for (const char *character = str;
     (character != NULL) && (*character != '\0'); character++
   ) {
     if (*character == '\n') {
       if (curLineLen > maxLineLen) maxLineLen = curLineLen;
+
       curLineLen = 0;
+
       if (lines < UINT16_MAX) lines++;
     } else if (curLineLen < UINT16_MAX) {
       curLineLen++;
     }
   }
+
   if (curLineLen > maxLineLen) maxLineLen = curLineLen;
 
   if (outW) *outW = gfxSaturate_(maxLineLen * entry->glyphW);
+
   if (outH) *outH = gfxSaturate_(lines * entry->glyphH);
+
   return true;
 }
 
@@ -701,8 +765,10 @@ static inline uint16_t gfxFitText(GfxDisplay *disp, GfxHandle font,
 ) {
   GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
   if ((str == NULL) || (entry == NULL) || (entry->glyphW == 0)) return 0;
+
   uint32_t fits = maxWidth / entry->glyphW;
   size_t len = strlen(str);
+
   return (fits < len) ? (uint16_t) fits : gfxSaturate_((uint32_t) len);
 }
 
@@ -724,8 +790,10 @@ static inline uint16_t gfxHitTestText(GfxDisplay *disp, GfxHandle font,
 ) {
   GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
   if ((str == NULL) || (entry == NULL) || (entry->glyphW == 0)) return 0;
+
   uint32_t idx = (((uint32_t) pixelX) + (entry->glyphW / 2)) / entry->glyphW;
   size_t len = strlen(str);
+
   return (idx < len) ? (uint16_t) idx : gfxSaturate_((uint32_t) len);
 }
 
@@ -745,8 +813,11 @@ static inline bool gfxGetFontRange(GfxDisplay *disp, GfxHandle font,
 ) {
   GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
   if (entry == NULL) return false;
+
   if (outFirst) *outFirst = entry->firstChar;
+
   if (outCount) *outCount = entry->numChars;
+
   return true;
 }
 
@@ -821,15 +892,18 @@ GFX_OUT_OF_LINE void gfxCmdBufSlot_(GfxCmdBuf *buf,
   ProcessMessage *message = buf->inFlight[idx];
   if (message != NULL) {
     processMessageWaitForDone(message, NULL);
+
     if (args->status != GFX_OK) {
       gfxCmdBufFail_(buf, (GfxError) args->status);
     }
+
     MESSAGE_BUFFER_UNSHARE(args->cmdData, buf->data[idx],
       MESSAGE_BUFFER_IN);
     args->cmdData = NULL;
     processMessageRelease(message);
     buf->inFlight[idx] = NULL;
   }
+
   if (send == false) {
     return;
   }
@@ -842,20 +916,25 @@ GFX_OUT_OF_LINE void gfxCmdBufSlot_(GfxCmdBuf *buf,
     gfxCmdBufFail_(buf, GFX_ERR_OUT_OF_MEMORY);
     return;
   }
+
   message = getAvailableMessage();
   GfxError status = GFX_ERR_OUT_OF_MEMORY;
+
   if (message != NULL) {
     processMessageInit(message, GFX_COMMAND_SIGNATURE | GFX_MSG_SUBMIT,
       args, sizeof(*args), /* waiting= */ true);
+
     if (sendProcessMessageToPid(buf->disp->driverPid, message)
       == processSuccess
     ) {
       buf->inFlight[idx] = message;
       return;
     }
+
     processMessageRelease(message);
     status = GFX_ERR_DEVICE_LOST;
   }
+
   MESSAGE_BUFFER_UNSHARE(args->cmdData, buf->data[idx], MESSAGE_BUFFER_IN);
   args->cmdData = NULL;
   gfxCmdBufFail_(buf, status);
@@ -871,9 +950,11 @@ GFX_OUT_OF_LINE void gfxCmdBufSlot_(GfxCmdBuf *buf,
 /// @return This function returns no value.
 GFX_OUT_OF_LINE void gfxCmdBufFlush_(GfxCmdBuf *buf) {
   uint8_t idx = buf->writeIdx;
+
   if (buf->used == 0) {
     return;
   }
+
   gfxCmdBufSlot_(buf, buf->submitArgs[idx], idx, true);
   idx ^= 1;
   buf->writeIdx = idx;
@@ -893,25 +974,31 @@ GFX_OUT_OF_LINE void gfxCmdBufFlush_(GfxCmdBuf *buf) {
 static inline GfxCmdBuf *gfxCmdBufCreate(GfxDisplay *disp, size_t capacity) {
   GfxCmdBuf *buf = (GfxCmdBuf *)calloc(1, sizeof(*buf));
   if (!buf) return NULL;
+
   buf->disp     = disp;
   buf->capacity = capacity;
+
   for (int ii = 0; ii < 2; ii++) {
     buf->data[ii] = (uint8_t *)malloc(capacity);
     buf->submitArgs[ii] = MESSAGE_ARGS_CREATE(GfxSubmitArgs,
       MESSAGE_ARGS_ROUND_TRIP);
   }
-  if (!buf->data[0] || !buf->data[1]
-    || !buf->submitArgs[0] || !buf->submitArgs[1]
+
+  if ((!buf->data[0]) || (!buf->data[1])
+    || (!buf->submitArgs[0]) || (!buf->submitArgs[1])
   ) {
     for (int ii = 0; ii < 2; ii++) {
       free(buf->data[ii]);
+
       if (buf->submitArgs[ii] != NULL) {
         MESSAGE_ARGS_DESTROY(buf->submitArgs[ii]);
       }
     }
+
     free(buf);
     return NULL;
   }
+
   return buf;
 }
 
@@ -925,12 +1012,15 @@ static inline GfxCmdBuf *gfxCmdBufCreate(GfxDisplay *disp, size_t capacity) {
 /// @return Always returns NULL, for `buf = gfxCmdBufDestroy(buf);`.
 static inline GfxCmdBuf *gfxCmdBufDestroy(GfxCmdBuf *buf) {
   if (!buf) return NULL;
+
   for (uint8_t ii = 0; ii < 2; ii++) {
     gfxCmdBufSlot_(buf, buf->submitArgs[ii], ii, false);
     free(buf->data[ii]);
     MESSAGE_ARGS_DESTROY(buf->submitArgs[ii]);
   }
+
   free(buf);
+
   return NULL;
 }
 
@@ -963,17 +1053,21 @@ static inline void gfxCmdBufBegin(GfxCmdBuf *buf, uint8_t flags) {
 GFX_OUT_OF_LINE uint8_t* gfxCmdBufReserve_(GfxCmdBuf *buf,
   size_t size
 ) {
-  if (size > buf->capacity - buf->used) {
+  if (size > (buf->capacity - buf->used)) {
     if ((size > buf->capacity)
       || ((buf->flags & GFX_CMDBUF_NO_FLUSH) != 0)
     ) {
       gfxCmdBufFail_(buf, GFX_ERR_CMDBUF_OVERFLOW);
       return NULL;
     }
+
     gfxCmdBufFlush_(buf);
   }
+
   uint8_t *record = buf->data[buf->writeIdx] + buf->used;
+
   buf->used += size;
+
   return record;
 }
 
@@ -994,6 +1088,7 @@ GFX_OUT_OF_LINE void gfxCmdRecord_(GfxCmdBuf *buf, GfxCmdType tag,
   uint8_t *record = gfxCmdBufReserve_(buf, 1 + size);
   if (record != NULL) {
     record[0] = (uint8_t) tag;
+
     if (size > 0) {
       memcpy(&record[1], params, size);
     }
@@ -1020,11 +1115,14 @@ GFX_OUT_OF_LINE void gfxCmdRecordRect_(GfxCmdBuf *buf,
     gfxCmdBufFail_(buf, GFX_ERR_INVALID_STATE);
     return;
   }
+
   uint8_t params[sizeof(GfxRect) + 4];
   memcpy(params, rect, sizeof(GfxRect));
+
   if (extraSize > 0) {
     memcpy(&params[sizeof(GfxRect)], extra, extraSize);
   }
+
   gfxCmdRecord_(buf, tag, params, sizeof(GfxRect) + extraSize);
 }
 
@@ -1042,6 +1140,7 @@ static inline GfxError gfxSubmit(GfxCmdBuf *buf) {
   gfxCmdBufFlush_(buf);
   GfxError error = (GfxError) buf->error;
   buf->error = GFX_OK;
+
   return error;
 }
 
@@ -1063,28 +1162,36 @@ static inline GfxError gfxPreupload(GfxCmdBuf *buf, GfxHandle *outHandle) {
   GfxError status = (GfxError) buf->error;
   uint8_t *data = buf->data[buf->writeIdx];
   size_t used = buf->used;
+
   buf->used  = 0;
   buf->error = GFX_OK;
+
   if (status != GFX_OK) {
     return status;
   }
 
   MESSAGE_ARGS_ALLOCATE(GfxPreuploadArgs, args);
+
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   args->cmdSize = (uint32_t) used;
   args->cmdData = MESSAGE_BUFFER_SHARE(data, used, MESSAGE_BUFFER_IN,
     buf->disp->driverPid);
   status = GFX_ERR_OUT_OF_MEMORY;
+
   if (args->cmdData != NULL) {
     status = gfxCall_(buf->disp, GFX_MSG_PREUPLOAD, args, sizeof(*args));
     MESSAGE_BUFFER_UNSHARE(args->cmdData, data, MESSAGE_BUFFER_IN);
   }
+
   if (status == GFX_OK) {
     *outHandle = args->handle;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -1103,6 +1210,7 @@ static inline GfxError gfxDiscardPreupload(GfxDisplay *disp,
   if (handle == GFX_INVALID_HANDLE) {
     return GFX_OK;
   }
+
   return gfxPostHandle_(disp, GFX_MSG_DISCARD_PREUPLOAD, handle);
 }
 
@@ -1332,6 +1440,7 @@ static inline void gfxCmdDrawSubImage(GfxCmdBuf *buf, GfxHandle image,
     gfxCmdBufFail_(buf, GFX_ERR_INVALID_STATE);
     return;
   }
+
   uint8_t params[sizeof(GfxHandle) + sizeof(GfxRect) + sizeof(GfxPoint)];
   memcpy(&params[0], &image, sizeof(image));
   memcpy(&params[2], srcRect, sizeof(*srcRect));
@@ -1354,11 +1463,13 @@ static inline void gfxCmdDrawText(GfxCmdBuf *buf, GfxPoint pos,
   const char *str
 ) {
   if (!str) return;
+
   size_t len = strlen(str);
   if (len > GFX_TEXT_MAX) {
     gfxCmdBufFail_(buf, GFX_ERR_CMDBUF_OVERFLOW);
     return;
   }
+
   uint8_t *record = gfxCmdBufReserve_(buf, GFX_CMD_DRAW_TEXT_SIZE(len));
   if (record != NULL) {
     record[0] = GFX_CMD_DRAW_TEXT;
@@ -1425,7 +1536,9 @@ static inline void gfxCmdScrollRect(GfxCmdBuf *buf, const GfxRect *rect,
 static inline GfxError gfxStatusCall_(GfxDisplay *disp, uint8_t type) {
   MESSAGE_ARGS_ALLOCATE(GfxFinishArgs, args);
   GfxError status = gfxCall_(disp, type, args, sizeof(*args));
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -1454,7 +1567,9 @@ static inline GfxError gfxGetError(GfxDisplay *disp) {
   if (status == GFX_OK) {
     status = (GfxError) args->error;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -1474,13 +1589,17 @@ static inline GfxError gfxSetCursor(GfxDisplay *disp, GfxHandle image,
   uint8_t hotX, uint8_t hotY
 ) {
   MESSAGE_ARGS_ALLOCATE(GfxSetCursorArgs, args);
+
   if (args != NULL) {
     args->image = image;
     args->hotX  = hotX;
     args->hotY  = hotY;
   }
+
   GfxError status = gfxCall_(disp, GFX_MSG_SET_CURSOR, args, sizeof(*args));
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
@@ -1498,7 +1617,9 @@ static inline GfxError gfxShowCursor(GfxDisplay *disp, bool show) {
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   args->show = show ? 1 : 0;
+
   return gfxPost_(disp, GFX_MSG_SHOW_CURSOR, args, sizeof(*args));
 }
 
@@ -1520,8 +1641,10 @@ static inline GfxError gfxWarpCursor(GfxDisplay *disp, int16_t pointerX,
   if (args == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   args->x = pointerX;
   args->y = pointerY;
+
   return gfxPost_(disp, GFX_MSG_WARP_CURSOR, args, sizeof(*args));
 }
 

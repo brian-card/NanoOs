@@ -1032,6 +1032,7 @@ int msg_q_push(msg_q_t *queue, msg_q_t *reply_to, msg_t *msg) {
 /// the queue couldn't be searched.
 bool msg_q_contains(msg_q_t *queue, msg_t *msg) {
   bool found = false;
+
   if ((queue == NULL) || (msg == NULL)
     || (queue->msg_sync->mtx_lock(&queue->lock) != msg_success)
   ) {
@@ -1044,6 +1045,7 @@ bool msg_q_contains(msg_q_t *queue, msg_t *msg) {
       break;
     }
   }
+
   queue->msg_sync->mtx_unlock(&queue->lock);
 
   return found;

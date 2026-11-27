@@ -82,6 +82,7 @@ static int waits;
 /// @return Returns a pointer to the element, or NULL for one it doesn't have.
 static void* fakeElement(ProcessMessage *message, msg_element_t element) {
   FakeMessage *fake = (FakeMessage*) message;
+
   if (element == MSG_ELEMENT_TYPE) {
     return &fake->type;
   } else if (element == MSG_ELEMENT_DATA) {
@@ -95,6 +96,7 @@ static void* fakeElement(ProcessMessage *message, msg_element_t element) {
   } else if (element == MSG_ELEMENT_IN_USE) {
     return &fake->inUse;
   }
+
   return NULL;
 }
 
@@ -107,6 +109,7 @@ static void* fakeElement(ProcessMessage *message, msg_element_t element) {
 /// @return Returns 0.
 static int fakeSetDone(ProcessMessage *message) {
   ((FakeMessage*) message)->done = true;
+
   return 0;
 }
 
@@ -119,6 +122,7 @@ static int fakeSetDone(ProcessMessage *message) {
 /// @return Returns 0.
 static int fakeRelease(ProcessMessage *message) {
   ((FakeMessage*) message)->inUse = false;
+
   return 0;
 }
 
@@ -133,9 +137,11 @@ static int fakeRelease(ProcessMessage *message) {
 static ProcessMessage* fakeWait(const struct timespec *ts) {
   (void) ts;
   waits++;
+
   if (popped == queued) {
     return NULL;
   }
+
   return (ProcessMessage*) queue[popped++];
 }
 
@@ -180,12 +186,15 @@ static void connected(WinSession *session) {
 static FakeMessage events(WinEventsArgs *args, uint8_t count) {
   memset(args, 0, sizeof(*args));
   args->count = count;
+
   for (uint8_t ii = 0; ii < count; ii++) {
     args->events[ii].type = (uint8_t) (ii + 1);
     args->events[ii].window = 7;
   }
+
   FakeMessage message = { WIN_COMMAND_SIGNATURE | WIN_MSG_EVENTS, args,
     sizeof(*args), true, false, true };
+
   return message;
 }
 
@@ -195,6 +204,7 @@ NANO_OS_TEST(window_client, events_are_copied_and_the_message_marked_done) {
   connected(&session);
   WinEventsArgs args;
   FakeMessage message = events(&args, 2);
+
   NANO_OS_ASSERT_TRUE(winHandleMessage(&session,
     (ProcessMessage*) &message));
   NANO_OS_ASSERT_TRUE(message.done);
@@ -236,9 +246,11 @@ NANO_OS_TEST(window_client, next_event_returns_each_event_then_times_out) {
   connected(&session);
   WinEventsArgs args;
   FakeMessage message = events(&args, 2);
+
   queue[queued++] = &message;
   struct timespec soon = { 0, 0 };
   WinEvent event;
+
   NANO_OS_ASSERT_EQ_INT(0, winNextEvent(&session, &event, &soon));
   NANO_OS_ASSERT_EQ_INT(1, event.type);
   NANO_OS_ASSERT_EQ_INT(0, winNextEvent(&session, &event, &soon));
@@ -270,6 +282,7 @@ NANO_OS_TEST(window_client, another_message_is_finished_and_dropped) {
   queue[queued++] = &other;
   struct timespec soon = { 0, 0 };
   WinEvent event;
+
   NANO_OS_ASSERT_EQ_INT(-ETIMEDOUT, winNextEvent(&session, &event, &soon));
   NANO_OS_ASSERT_TRUE(other.done);
   NANO_OS_ASSERT_FALSE(other.inUse);

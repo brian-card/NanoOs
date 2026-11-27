@@ -109,6 +109,7 @@ static bool parseOptions(Term *term, int argc, char **argv,
 ) {
   for (int ii = 1; ii < argc; ii++) {
     char *end = NULL;
+
     if (strncmp(argv[ii], TERM_OPTION_SIZE,
       TERM_LITERAL_LENGTH(TERM_OPTION_SIZE)) == 0
     ) {
@@ -119,6 +120,7 @@ static bool parseOptions(Term *term, int argc, char **argv,
       ) {
         return false;
       }
+
       *rows = strtol(end + 1, &end, 10);
       if ((*end != '\0') || (*rows <= 0) || (*rows > WIN_GRID_MAX_ROWS)) {
         return false;
@@ -128,10 +130,13 @@ static bool parseOptions(Term *term, int argc, char **argv,
     ) {
       frame->x = (int16_t) strtol(
         &argv[ii][TERM_LITERAL_LENGTH(TERM_OPTION_AT)], &end, 10);
+
       if (*end != ',') {
         return false;
       }
+
       frame->y = (int16_t) strtol(end + 1, &end, 10);
+
       if (*end != '\0') {
         return false;
       }
@@ -143,6 +148,7 @@ static bool parseOptions(Term *term, int argc, char **argv,
       return false;
     }
   }
+
   return true;
 }
 
@@ -156,12 +162,14 @@ static bool parseOptions(Term *term, int argc, char **argv,
 /// @return Returns false once term should end, true otherwise.
 static bool handleEvent(Term *term, const WinEvent *event) {
   TermParser *parser = &term->parser;
+
   if ((event->type == WIN_EVENT_RESIZED) && (event->widget == TERM_GRID)) {
     parser->columns = event->columns;
     parser->rows = event->rows;
     if (parser->row >= parser->rows) {
       parser->row = parser->rows - 1;
     }
+
     if (parser->column >= parser->columns) {
       parser->column = parser->columns - 1;
     }
@@ -173,6 +181,7 @@ static bool handleEvent(Term *term, const WinEvent *event) {
   ) {
     return false;
   }
+
   return true;
 }
 
@@ -187,40 +196,52 @@ static bool handleEvent(Term *term, const WinEvent *event) {
 /// @return This function returns no value.
 static void run(Term *term) {
   WinSession *session = &term->session;
+
   while (true) {
     while (session->nextEvent < session->numEvents) {
       if (!handleEvent(term, &session->events[session->nextEvent++])) {
         return;
       }
     }
+
     if (!session->connected) {
       return;
     }
+
     ProcessMessage *message = processMessageQueueWait(NULL);
     if ((message == NULL) || winHandleMessage(session, message)) {
       continue;
     }
+
     const char *text = consoleOutputText(message);
     if (text != NULL) {
       term->text = text;
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Parse", "termParse", term);
+
       if (term->tee) {
         strncpy(term->teeText, text, CONSOLE_BUFFER_SIZE);
       }
+
       // stderr goes through the console, which may be waiting for this
       // message, so the copy is written once the message is done.
       consoleOutputDoneTo(message, term->consolePid);
+
       if (term->tee) {
         fputs(term->teeText, stderr);
       }
+
       continue;
     }
+
     bool ended = (processMessageType(message)
       == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_SESSION_ENDED));
+
     processMessageSetDone(message);
+
     if (processMessageWaiting(message) == false) {
       processMessageRelease(message);
     }
+
     if (ended) {
       return;
     }
@@ -232,12 +253,14 @@ int main(int argc, char **argv) {
     printUsage(stdout);
     return 0;
   }
+
   GfxRect frame = { TERM_DEFAULT_LEFT, TERM_DEFAULT_TOP, 0, 0 };
   uint8_t flags = WIN_FLAG_DECORATED | WIN_FLAG_RESIZABLE
     | WIN_FLAG_IN_TASKBAR;
   long columns = TERM_DEFAULT_COLUMNS;
   long rows = TERM_DEFAULT_ROWS;
   Term *term = (Term*) calloc(1, sizeof(Term));
+
   if (term == NULL) {
     fputs("term: out of memory\n", stderr);
     return 1;
@@ -249,6 +272,7 @@ int main(int argc, char **argv) {
   }
 
   WinSession *session = &term->session;
+
   findSystemProcess(CONSOLE_PROCESS_NAME, &term->consolePid);
   WinError status = winConnect(session);
   if (status != WIN_OK) {
@@ -257,15 +281,19 @@ int main(int argc, char **argv) {
     free(term);
     return 1;
   }
+
   const WinHelloArgs *hello = &session->hello;
   GfxRect grid = { 0, 0, (int16_t) (columns * hello->cellWidth),
     (int16_t) (rows * hello->cellHeight) };
+
   frame.w = grid.w;
   frame.h = grid.h;
+
   if ((flags & WIN_FLAG_DECORATED) != 0) {
     frame.w += 2 * hello->borderWidth;
-    frame.h += hello->titleHeight + 2 * hello->borderWidth;
+    frame.h += hello->titleHeight + (2 * hello->borderWidth);
   }
+
   uint8_t record[WIN_RECORD_HEADER_SIZE];
   winGridRecord(record, TERM_GRID, WIN_WIDGET_SESSION, grid);
   // The window server may not be shared a pointer into an overlay.
@@ -285,11 +313,14 @@ int main(int argc, char **argv) {
   parser->attribute = TERM_DEFAULT_ATTRIBUTE;
   parser->put = -1;
   run(term);
+
   // The window goes when term ends.  A one-way destroy posted just before
   // exiting can be dropped unread, and its arguments with it.
   if (session->connected) {
     winDisconnect(session);
   }
+
   free(term);
+
   return 0;
 }

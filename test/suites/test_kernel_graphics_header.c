@@ -125,6 +125,7 @@ static char longText[70001];
 /// @return This function returns no value.
 static void finish(ProcessMessage *processMessage) {
   processMessageSetDone(processMessage);
+
   if (processMessageWaiting(processMessage) == false) {
     processMessageRelease(processMessage);
   }
@@ -141,12 +142,14 @@ static void finish(ProcessMessage *processMessage) {
 static void recordMessage(ProcessMessage *processMessage) {
   void *args = processMessageData(processMessage);
   uint8_t type = (uint8_t) processMessageType(processMessage);
+
   if (numReceived < MAX_RECEIVED) {
     Received *receivedMessage = &received[numReceived];
     receivedMessage->type = processMessageType(processMessage);
     receivedMessage->size = processMessageSize(processMessage);
     receivedMessage->waiting = processMessageWaiting(processMessage);
     memset(receivedMessage->args, 0, sizeof(receivedMessage->args));
+
     if (args != NULL) {
       size_t size = receivedMessage->size;
       memcpy(receivedMessage->args, args,
@@ -154,10 +157,12 @@ static void recordMessage(ProcessMessage *processMessage) {
           ? size : sizeof(receivedMessage->args));
     }
   }
+
   numReceived++;
 
   const uint8_t *data = NULL;
   uint32_t size = 0;
+
   if (type == GFX_MSG_SUBMIT) {
     data = ((GfxSubmitArgs*) args)->cmdData;
     size = ((GfxSubmitArgs*) args)->cmdSize;
@@ -165,6 +170,7 @@ static void recordMessage(ProcessMessage *processMessage) {
     data = ((GfxPreuploadArgs*) args)->cmdData;
     size = ((GfxPreuploadArgs*) args)->cmdSize;
   }
+
   if ((data != NULL) && (numCommandLists < MAX_COMMAND_LISTS)) {
     commandSizes[numCommandLists] = size;
     memcpy(commands[numCommandLists], data,
@@ -191,10 +197,12 @@ static void answer(uint8_t type, void *args, bool waiting) {
     if (args != NULL) {
       MESSAGE_ARGS_DESTROY(args);
     }
+
     return;
   }
 
   *((uint8_t*) args) = answerStatus;
+
   if (type == GFX_MSG_OPEN_DISPLAY) {
     GfxOpenDisplayArgs *open = (GfxOpenDisplayArgs*) args;
     open->width = 640;
@@ -233,25 +241,29 @@ static void answer(uint8_t type, void *args, bool waiting) {
 static void* fakeDriver(void *args) {
   (void) args;
   ProcessMessage *held = NULL;
+
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
     if (processMessage == NULL) {
       continue;
     }
-    if ((processMessageType(processMessage) & ~((int64_t) 0xff))
+    if ((processMessageType(processMessage) & (~((int64_t) 0xff)))
       != GFX_COMMAND_SIGNATURE
     ) {
       finish(processMessage);
       continue;
     }
+
     uint8_t type = (uint8_t) processMessageType(processMessage);
     void *messageArgs = processMessageData(processMessage);
     bool waiting = processMessageWaiting(processMessage);
+
     if ((held != NULL) && (driverMode != DRIVER_HOLD_SUBMITS)) {
       answer(GFX_MSG_SUBMIT, processMessageData(held), true);
       finish(held);
       held = NULL;
     }
+
     recordMessage(processMessage);
 
     if (driverMode == DRIVER_EXIT) {
@@ -264,9 +276,11 @@ static void* fakeDriver(void *args) {
       ProcessMessage *killMessage = initSendProcessMessageToPid(schedulerPid,
         SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
         &kill, sizeof(kill), true);
+
       if (killMessage != NULL) {
         processMessageWaitForDone(killMessage, NULL);
       }
+
       killResult = (killMessage != NULL) ? kill.returnValue : -1000;
       return NULL;
     } else if (driverMode == DRIVER_HOLD_FOREVER) {
@@ -277,6 +291,7 @@ static void* fakeDriver(void *args) {
       for (int ii = 0; ii < holdYields; ii++) {
         processYield();
       }
+
       clientStateWhileHeld = processState(&allProcesses[clientPid - 1]);
     } else if ((driverMode == DRIVER_HOLD_SUBMITS)
       && (type == GFX_MSG_SUBMIT)
@@ -285,9 +300,11 @@ static void* fakeDriver(void *args) {
         held = processMessage;
         continue;
       }
+
       for (int ii = 0; ii < 20; ii++) {
         processYield();
       }
+
       clientStateWhileHeld = processState(&allProcesses[clientPid - 1]);
       heldReleased = true;
       answer(type, processMessageData(held), true);
@@ -303,6 +320,7 @@ static void* fakeDriver(void *args) {
     answer(type, messageArgs, waiting);
     finish(processMessage);
   }
+
   return NULL;
 }
 
@@ -355,15 +373,18 @@ static ProcessDescriptor* startDriver(DriverMode mode) {
   clientPid = getRunningPid();
   ProcessDescriptor *processDescriptor = &allProcesses[driverSlotPid() - 1];
   processQueueRemove(halMockFreeQueue(), processDescriptor);
+
   if (processCreate(processDescriptor, fakeDriver, NULL) != processSuccess) {
     return NULL;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->readyQueue
     = halMockReadyQueue(PRIVILEGE_LEVEL_EXECUTIVE);
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
+
   for (uint32_t type = 0; type < GFX_MSG_COUNT; type++) {
     if (addProcessIpcCapability(getRunningProcess(),
       processDescriptor->processId, GFX_COMMAND_SIGNATURE, type) != 0
@@ -371,6 +392,7 @@ static ProcessDescriptor* startDriver(DriverMode mode) {
       return NULL;
     }
   }
+
   return processDescriptor;
 }
 
@@ -383,7 +405,9 @@ static ProcessDescriptor* startDriver(DriverMode mode) {
 /// @return Returns true if the open succeeded.
 static bool openDisplay(GfxDisplay *disp) {
   GfxError status = gfxOpenDisplay(disp, GFX_DRIVER_PROCESS_NAME, 640, 480);
+
   resetDriver((DriverMode) driverMode);
+
   return status == GFX_OK;
 }
 
@@ -419,6 +443,7 @@ static bool bytesEqual(const uint8_t *expected, const uint8_t *actual,
       return false;
     }
   }
+
   return true;
 }
 
@@ -465,6 +490,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, every_message_carries_the_signature_ki
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxWarpCursor(&disp, 5, 6));
   NANO_OS_ASSERT_NULL(gfxCmdBufDestroy(buf));
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxCloseDisplay(&disp));
+
   for (int ii = 0; (ii < 100) && (numReceived < 20); ii++) {
     processYield();
   }
@@ -491,11 +517,13 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, every_message_carries_the_signature_ki
   };
   size_t count = sizeof(expected) / sizeof(expected[0]);
   NANO_OS_ASSERT_EQ_INT((int) count, numReceived);
+
   for (size_t ii = 0; ii < count; ii++) {
     NANO_OS_ASSERT_TRUE(received[ii].type == gfxType(expected[ii].type));
     NANO_OS_ASSERT_EQ_INT(expected[ii].waiting, received[ii].waiting);
     NANO_OS_ASSERT_EQ_INT((int) expected[ii].size, (int) received[ii].size);
   }
+
   NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
 }
 
@@ -578,6 +606,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_driver_that_isnt_running_is_device_l
   memset(&disp, 0, sizeof(disp));
   disp.driverPid = driverSlotPid();
   uint16_t live = messageArgsCounts()->live;
+
   NANO_OS_ASSERT_EQ_INT(GFX_ERR_DEVICE_LOST, gfxGetError(&disp));
   NANO_OS_ASSERT_EQ_INT(GFX_ERR_DEVICE_LOST, gfxDestroyImage(&disp, 5));
   NANO_OS_ASSERT_EQ_INT(GFX_ERR_DEVICE_LOST, gfxShowCursor(&disp, true));
@@ -603,6 +632,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, the_driver_sees_inputs_and_a_preset_st
   GfxImageDesc image = { 3, 2, GFX_FMT_RGBA2222, pixels, sizeof(pixels) };
   GfxFontDesc font = { 6, 8, 'a', 2, glyphs, sizeof(glyphs) };
   GfxRect rect = { 10, 20, 30, 40 };
+
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxGetSurfaceSize(&disp, &width, &height));
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxUploadImage(&disp, &image, &handle));
   NANO_OS_ASSERT_EQ_INT(GFX_OK,
@@ -614,6 +644,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, the_driver_sees_inputs_and_a_preset_st
   NANO_OS_ASSERT_EQ_INT(GFX_ERR_INVALID_HANDLE, gfxGetError(&disp));
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxSetCursor(&disp, 0x0405, 7, 9));
   NANO_OS_ASSERT_EQ_INT(9, numReceived);
+
   for (int ii = 0; ii < 9; ii++) {
     NANO_OS_ASSERT_EQ_INT(GFX_ERR_DEVICE_LOST, received[ii].args[0]);
   }
@@ -662,6 +693,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, the_client_returns_what_the_driver_wro
   nextHandle = 0x2345;
   GfxRect rect = { 0, 0, 8, 8 };
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxCaptureRect(&disp, &rect, &handle));
   NANO_OS_ASSERT_EQ_INT(0x2345, handle);
   uint16_t width = 0, height = 0;
@@ -686,6 +718,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_failed_call_writes_no_outputs,
   GfxRect rect = { 0, 0, 8, 8 };
   GfxHandle handle = 0x7777;
   uint16_t width = 99, height = 98;
+
   NANO_OS_ASSERT_EQ_INT(GFX_ERR_NOT_SUPPORTED,
     gfxCaptureRect(&disp, &rect, &handle));
   NANO_OS_ASSERT_EQ_INT(GFX_INVALID_HANDLE, handle);
@@ -707,6 +740,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_driver_writing_an_in_buffer_is_repor
   uint8_t glyphs[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
   GfxFontDesc font = { 8, 8, 'A', 1, glyphs, sizeof(glyphs) };
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxUploadFont(&disp, &font, &handle));
   NANO_OS_ASSERT_EQ_INT(1,
     messageArgsCounts()->errors[MESSAGE_ARGS_ERROR_IN_MODIFIED]);
@@ -723,11 +757,14 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, one_way_arguments_are_left_to_the_driv
   NANO_OS_ASSERT_TRUE(openDisplay(&disp));
   messageArgsResetCounts();
   uint16_t live = messageArgsCounts()->live;
+
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxDestroyImage(&disp, 5));
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxWarpCursor(&disp, 3, 4));
+
   for (int ii = 0; (ii < 100) && (numReceived < 2); ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_EQ_INT(2, numReceived);
   GfxHandleArgs destroy;
   memcpy(&destroy, received[0].args, sizeof(destroy));
@@ -755,6 +792,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, every_record_has_its_exact_encoding,
   GfxPoint first = { 1, 2 }, second = { 3, 4 }, third = { 5, 6 };
   GfxPoint origin = { -1, 5 };
   GfxPoint center = { 7, 8 };
+
   gfxCmdSetViewport(buf, &rect);
   gfxCmdSetOrigin(buf, origin);
   gfxCmdPushScissor(buf, &scissor);
@@ -805,6 +843,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, every_record_has_its_exact_encoding,
     + GFX_CMD_DRAW_IMAGE_SIZE + GFX_CMD_DRAW_SUB_IMAGE_SIZE
     + GFX_CMD_DRAW_TEXT_SIZE(2) + GFX_CMD_CALL_SIZE + GFX_CMD_COPY_RECT_SIZE
     + GFX_CMD_SCROLL_RECT_SIZE;
+
   NANO_OS_ASSERT_EQ_INT((int) sizeof(expected), (int) sizes);
   NANO_OS_ASSERT_EQ_INT(GFX_OK, buf->error);
   NANO_OS_ASSERT_EQ_INT((int) sizeof(expected), (int) buf->used);
@@ -822,9 +861,11 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_record_that_doesnt_fit_goes_whole_in
   GfxCmdBuf *buf = gfxCmdBufCreate(&disp, 32);
   NANO_OS_ASSERT_NOT_NULL(buf);
   gfxCmdBufBegin(buf, 0);
+
   for (int ii = 0; ii < 31; ii++) {
     gfxCmdPopScissor(buf);
   }
+
   GfxRect rect = { 1, 2, 3, 4 };
   gfxCmdDrawRect(buf, &rect, true);
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxSubmit(buf));
@@ -832,9 +873,11 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_record_that_doesnt_fit_goes_whole_in
 
   NANO_OS_ASSERT_EQ_INT(2, numCommandLists);
   NANO_OS_ASSERT_EQ_INT(31, commandSizes[0]);
+
   for (int ii = 0; ii < 31; ii++) {
     NANO_OS_ASSERT_EQ_INT(GFX_CMD_POP_SCISSOR, commands[0][ii]);
   }
+
   const uint8_t expected[] = {
     GFX_CMD_DRAW_RECT, 1, 0, 2, 0, 3, 0, 4, 0, 1,
   };
@@ -945,6 +988,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, destroy_waits_for_the_buffer_in_flight
   messageArgsResetCounts();
   uint16_t live = messageArgsCounts()->live;
   GfxCmdBuf *buf = gfxCmdBufCreate(&disp, 32);
+
   NANO_OS_ASSERT_NOT_NULL(buf);
   resetDriver(DRIVER_HOLD_YIELDS);
   holdYields = 200;
@@ -979,6 +1023,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_preupload_sends_the_whole_recording,
     GFX_CMD_DRAW_RECT, 1, 0, 2, 0, 3, 0, 4, 0, 0,
     GFX_CMD_CLEAR, GFX_CMD_POP_SCISSOR,
   };
+
   NANO_OS_ASSERT_EQ_INT(1, numReceived);
   NANO_OS_ASSERT_TRUE(received[0].type == gfxType(GFX_MSG_PREUPLOAD));
   NANO_OS_ASSERT_EQ_INT((int) sizeof(expected), commandSizes[0]);
@@ -1003,9 +1048,11 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_preupload_too_long_for_the_buffer_ex
   NANO_OS_ASSERT_EQ_INT(GFX_INVALID_HANDLE, handle);
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxSubmit(buf));
   gfxCmdBufDestroy(buf);
+
   for (int ii = 0; ii < 20; ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_EQ_INT(0, numReceived);
 }
 
@@ -1020,11 +1067,13 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, a_full_font_cache_refuses_an_upload,
   uint8_t glyphs[8] = { 0 };
   GfxFontDesc font = { 4, 8, 'A', 1, glyphs, sizeof(glyphs) };
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   for (int ii = 0; ii < GFX_MAX_FONTS; ii++) {
     NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxUploadFont(&disp, &font, &handle));
     NANO_OS_ASSERT_EQ_INT(FIRST_HANDLE + ii, handle);
     NANO_OS_ASSERT_EQ_INT(4, gfxMeasureText(&disp, handle, "x"));
   }
+
   NANO_OS_ASSERT_EQ_INT(GFX_ERR_OUT_OF_HANDLES,
     gfxUploadFont(&disp, &font, &handle));
   NANO_OS_ASSERT_EQ_INT(GFX_INVALID_HANDLE, handle);
@@ -1040,6 +1089,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, the_default_font_cant_be_destroyed,
   uint8_t glyphs[8] = { 0 };
   GfxFontDesc font = { 4, 10, 'A', 1, glyphs, sizeof(glyphs) };
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxUploadFont(&disp, &font, &handle));
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxSetDefaultFont(&disp, handle));
   uint8_t width = 0, height = 0;
@@ -1067,10 +1117,12 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, measurements_of_long_strings_saturate,
   uint8_t glyphs[8] = { 0 };
   GfxFontDesc narrow = { 1, 1, 'A', 1, glyphs, sizeof(glyphs) };
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   NANO_OS_ASSERT_EQ_INT(GFX_OK, gfxUploadFont(&disp, &narrow, &handle));
 
   size_t length = sizeof(longText) - 1;
   char *text = longText;
+
   memset(text, 'x', length);
   text[length] = '\0';
   NANO_OS_ASSERT_EQ_INT(UINT16_MAX,
@@ -1084,9 +1136,11 @@ NANO_OS_KERNEL_TEST_WITH(graphics_header, measurements_of_long_strings_saturate,
     &width, &height));
   NANO_OS_ASSERT_EQ_INT(UINT16_MAX, width);
   NANO_OS_ASSERT_EQ_INT(8, height);
+
   for (size_t ii = 1; ii < length; ii += 2) {
     text[ii] = '\n';
   }
+
   NANO_OS_ASSERT_TRUE(gfxMeasureTextSize(&disp, GFX_INVALID_HANDLE, text,
     &width, &height));
   NANO_OS_ASSERT_EQ_INT(6, width);

@@ -52,11 +52,12 @@ void vdpBufferOutput(VdpOutputBuffer *buffer,
     data += length - VDP_OUTPUT_BUFFER_SIZE;
     length = VDP_OUTPUT_BUFFER_SIZE;
     buffer->length = 0;
-  } else if (buffer->length + length > VDP_OUTPUT_BUFFER_SIZE) {
+  } else if ((buffer->length + length) > VDP_OUTPUT_BUFFER_SIZE) {
     size_t drop = buffer->length + length - VDP_OUTPUT_BUFFER_SIZE;
     buffer->length -= (uint16_t) drop;
     memmove(buffer->data, &buffer->data[drop], buffer->length);
   }
+
   memcpy(&buffer->data[buffer->length], data, length);
   buffer->length += (uint16_t) length;
 }

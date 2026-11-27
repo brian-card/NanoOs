@@ -58,18 +58,22 @@ static void printKey(const WinEvent *event) {
     GFX_MOD_CTRL, GFX_MOD_SHIFT, GFX_MOD_ALT, GFX_MOD_ALT_GR,
   };
   char name[sizeof("0xff")];
+
   if ((event->key > ' ') && (event->key < ASCII_DELETE)) {
     name[0] = (char) event->key;
     name[1] = '\0';
   } else {
     snprintf(name, sizeof(name), "0x%02x", (unsigned int) event->key);
   }
+
   printf("KEY %s", name);
+
   for (size_t ii = 0; ii < WINTEST_COUNT(modifiers); ii++) {
     if ((event->modifiers & modifierBits[ii]) != 0) {
       fputs(modifiers[ii], stdout);
     }
   }
+
   puts((event->detail != 0) ? "" : " up");
 }
 
@@ -83,6 +87,7 @@ static void printKey(const WinEvent *event) {
 /// otherwise.
 static bool printEvent(const WinEvent *event) {
   unsigned int window = event->window;
+
   if (event->type == WIN_EVENT_DISCONNECTED) {
     puts("wintest: disconnected");
     return false;
@@ -115,6 +120,7 @@ static bool printEvent(const WinEvent *event) {
   } else {
     printf("EVENT %u %u\n", (unsigned int) event->type, window);
   }
+
   return true;
 }
 
@@ -146,6 +152,7 @@ void* wintestPrint(void *args) {
   } else {
     wintest->more = printEvent(&wintest->event);
   }
+
   return args;
 }
 
@@ -162,7 +169,9 @@ static void printOutput(const char *text) {
   if (text == NULL) {
     return;
   }
+
   fputs("wintest: output ", stdout);
+
   for (; *text != '\0'; text++) {
     if (*text == '\n') {
       fputs("\\n", stdout);
@@ -174,6 +183,7 @@ static void printOutput(const char *text) {
       fwrite(text, 1, 1, stdout);
     }
   }
+
   fputs("\n", stdout);
 }
 
@@ -192,41 +202,51 @@ void* wintestEvents(void *args) {
   Wintest *wintest = (Wintest*) args;
   WinSession *session = &wintest->session;
   ProcessId consolePid = 0;
+
   findSystemProcess(CONSOLE_PROCESS_NAME, &consolePid);
   struct timespec deadline;
   struct timespec *until = NULL;
+
   if (wintest->waitMs > 0) {
     timespec_get(&deadline, TIME_UTC);
     deadline.tv_sec += wintest->waitMs / WINTEST_MS_PER_SECOND;
     deadline.tv_nsec
       += (wintest->waitMs % WINTEST_MS_PER_SECOND) * WINTEST_NS_PER_MS;
+
     if (deadline.tv_nsec >= WINTEST_NS_PER_SECOND) {
       deadline.tv_sec++;
       deadline.tv_nsec -= WINTEST_NS_PER_SECOND;
     }
+
     until = &deadline;
   }
+
   wintest->more = true;
   while (wintest->more) {
-    if ((session->nextEvent < session->numEvents) || !session->connected) {
+    if ((session->nextEvent < session->numEvents) || (!session->connected)) {
       if (winNextEvent(session, &wintest->event, until) != 0) {
         break;
       }
+
       wintest->more = printEvent(&wintest->event);
+
       if (wintest->closes
         && (wintest->event.type == WIN_EVENT_CLOSE_REQUESTED)
       ) {
         winDestroyWindow(session, wintest->event.window);
       }
+
       continue;
     }
+
     ProcessMessage *message = processMessageQueueWait(until);
     if ((message == NULL) && (until != NULL)) {
       break;
-    } else if ((message != NULL) && !winHandleMessage(session, message)) {
+    } else if ((message != NULL) && (!winHandleMessage(session, message))) {
       printOutput(consoleOutputText(message));
       consoleOutputDoneTo(message, consolePid);
     }
   }
+
   return args;
 }

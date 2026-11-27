@@ -49,26 +49,33 @@
 static int inject(int64_t command, void *args, size_t size) {
   ProcessId console = 0;
   ProcessMessage *message = getAvailableMessage();
+
   if ((args == NULL) || (message == NULL)
     || (findSystemProcess(CONSOLE_PROCESS_NAME, &console) != 0)
   ) {
     if (message != NULL) {
       processMessageRelease(message);
     }
+
     if (args != NULL) {
       MESSAGE_ARGS_DESTROY(args);
     }
+
     return -ENOMEM;
   }
+
   processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | command, args,
     size, /* waiting= */ false);
   errno = 0;
+
   if (sendProcessMessageToPid(console, message) != processSuccess) {
     int rc = (errno != 0) ? -errno : -EIO;
+
     processMessageRelease(message);
     MESSAGE_ARGS_DESTROY(args);
     return rc;
   }
+
   return 0;
 }
 
@@ -95,6 +102,7 @@ static int inject(int64_t command, void *args, size_t size) {
 /// @return This function returns no value.
 static void injectAll(void) {
   int inputRc = 0;
+
   for (uint8_t port = 0; port < CONSOLE_NUM_PORTS; port++) {
     ConsoleInputReadyArgs *inputArgs = MESSAGE_ARGS_CREATE(
       ConsoleInputReadyArgs, MESSAGE_ARGS_ONE_WAY);
@@ -103,11 +111,13 @@ static void injectAll(void) {
       inputArgs->numBytes = WINTEST_LITERAL_LENGTH(WINTEST_INJECTED_INPUT);
       memcpy(inputArgs->bytes, WINTEST_INJECTED_INPUT, inputArgs->numBytes);
     }
+
     int rc = inject(CONSOLE_INPUT_READY, inputArgs, sizeof(*inputArgs));
     if (rc < 0) {
       inputRc = rc;
     }
   }
+
   ConsoleWinsizeArgs *winsizeArgs = MESSAGE_ARGS_CREATE(ConsoleWinsizeArgs,
     MESSAGE_ARGS_ONE_WAY);
   if (winsizeArgs != NULL) {
@@ -115,8 +125,10 @@ static void injectAll(void) {
     winsizeArgs->columns = WINTEST_INJECTED_COLUMNS;
     winsizeArgs->returnValue = 0;
   }
+
   int winsizeRc = inject(CONSOLE_SET_WINSIZE, winsizeArgs,
     sizeof(*winsizeArgs));
+
   printf("wintest: inject input %s\n",
     (inputRc < 0) ? strerror(-inputRc) : "sent");
   printf("wintest: inject size %s\n",
@@ -133,5 +145,6 @@ static void injectAll(void) {
 /// @return Always returns the provided pointer.
 void* wintestInject(void *args) {
   injectAll();
+
   return args;
 }

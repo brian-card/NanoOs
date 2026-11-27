@@ -55,7 +55,9 @@ static void waitForEnd(uint8_t port) {
       == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_SESSION_ENDED)
     ) {
       uint8_t ended = (uint8_t) (uintptr_t) processMessageData(message);
+
       processMessageRelease(message);
+
       if (ended == port) {
         return;
       }
@@ -80,6 +82,7 @@ void* fillSessions(void *args) {
   uint8_t ports[CONSOLE_NUM_PORTS];
   int numPorts = 0;
   uint8_t shell = 0;
+
   while (numPorts < CONSOLE_NUM_PORTS) {
     if (windowServerOpenSession(24, 80, getpid(), &ports[numPorts], &shell)
       != 0
@@ -87,9 +90,11 @@ void* fillSessions(void *args) {
       printf("sessiontest: open failed: %s\n", strerror(errno));
       break;
     }
+
     printf("sessiontest: opened port %d\n", ports[numPorts]);
     numPorts++;
   }
+
   if (numPorts == 0) {
     return args;
   }
@@ -97,6 +102,7 @@ void* fillSessions(void *args) {
   windowServerCloseSession(ports[0]);
   waitForEnd(ports[0]);
   printf("sessiontest: ended port %d\n", ports[0]);
+
   if (windowServerOpenSession(24, 80, getpid(), &ports[0], &shell) == 0) {
     printf("sessiontest: opened port %d\n", ports[0]);
   } else {
@@ -107,8 +113,10 @@ void* fillSessions(void *args) {
     windowServerCloseSession(ports[ii]);
     waitForEnd(ports[ii]);
   }
+
   printf("sessiontest: ended %d sessions\n", numPorts);
   *status = 0;
+
   return args;
 }
 

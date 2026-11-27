@@ -76,8 +76,9 @@ uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
   size_t glyphSize = ((font->glyphW + 7) / 8) * font->glyphH;
   size_t fontSize = glyphSize * font->numChars;
   size_t bufferSize = glyphSize * VDP_FONT_NUM_GLYPHS;
+
   if ((font->bitmap == NULL) || (glyphSize == 0) || (font->numChars == 0)
-    || (font->firstChar + font->numChars > VDP_FONT_NUM_GLYPHS)
+    || ((font->firstChar + font->numChars) > VDP_FONT_NUM_GLYPHS)
     || (font->size < fontSize) || (bufferSize > 0xFFFF)
   ) {
     return GFX_ERR_NOT_SUPPORTED;
@@ -91,6 +92,7 @@ uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
     23, 0, 0xA0, VDP_WORD(fontId), 2,
     23, 0, 0xA0, VDP_WORD(fontId), 0, VDP_WORD(bufferSize)
   };
+
   vdpWrite(upload, sizeof(upload));
   vdpWriteZeros(glyphSize * font->firstChar);
   vdpWrite((const uint8_t*) font->bitmap, fontSize);
@@ -100,5 +102,6 @@ uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
     font->glyphH, 0
   };
   vdpWrite(define, sizeof(define));
+
   return GFX_OK;
 }

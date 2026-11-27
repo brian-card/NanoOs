@@ -55,10 +55,12 @@
 /// @return Returns 0 on success, -1 and sets errno on failure.
 static int nanoOsWindowServerCommand(SchedulerCommand command, uint8_t *pid) {
   MESSAGE_ARGS_ALLOCATE(SchedulerWindowServerArgs, schedulerWindowServerArgs);
+
   if (schedulerWindowServerArgs == NULL) {
     errno = ENOMEM;
     return -1;
   }
+
   schedulerWindowServerArgs->errorNumber = 0;
   schedulerWindowServerArgs->pid = 0;
 
@@ -70,18 +72,23 @@ static int nanoOsWindowServerCommand(SchedulerCommand command, uint8_t *pid) {
     errno = ENOMEM;
     return -1;
   }
+
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
   int errorNumber = schedulerWindowServerArgs->errorNumber;
+
   if (pid != NULL) {
     *pid = schedulerWindowServerArgs->pid;
   }
+
   MESSAGE_ARGS_FREE(schedulerWindowServerArgs);
+
   if (errorNumber != 0) {
     errno = errorNumber;
     return -1;
   }
+
   return 0;
 }
 
@@ -121,10 +128,12 @@ static int nanoOsWindowServerSession(SchedulerCommand command,
   SchedulerOpenSessionArgs *args
 ) {
   MESSAGE_ARGS_ALLOCATE(SchedulerOpenSessionArgs, sessionArgs);
+
   if (sessionArgs == NULL) {
     errno = ENOMEM;
     return -1;
   }
+
   *sessionArgs = *args;
   sessionArgs->status = EIO;
 
@@ -136,15 +145,18 @@ static int nanoOsWindowServerSession(SchedulerCommand command,
     errno = EPERM;
     return -1;
   }
+
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
   *args = *sessionArgs;
   MESSAGE_ARGS_FREE(sessionArgs);
+
   if (args->status != 0) {
     errno = args->status;
     return -1;
   }
+
   return 0;
 }
 
@@ -160,10 +172,12 @@ int nanoOsWindowServerOpenSession(uint8_t rows, uint8_t columns,
     .shell = 0,
   };
   int returnValue = nanoOsWindowServerSession(SCHEDULER_OPEN_SESSION, &args);
+
   if (returnValue == 0) {
     *port = args.port;
     *shell = args.shell;
   }
+
   return returnValue;
 }
 
@@ -176,5 +190,6 @@ int nanoOsWindowServerCloseSession(uint8_t port) {
     .port = port,
     .shell = 0,
   };
+
   return nanoOsWindowServerSession(SCHEDULER_CLOSE_SESSION, &args);
 }

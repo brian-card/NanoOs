@@ -58,7 +58,7 @@ static const uint8_t _wmKeySequenceEnds[] = {
 };
 
 GFX_STATIC_ASSERT(sizeof(_wmKeySequenceEnds)
-  == GFX_KEY_RIGHT - GFX_KEY_INSERT + 1,
+  == (GFX_KEY_RIGHT - GFX_KEY_INSERT + 1),
   "_wmKeySequenceEnds must cover GFX_KEY_INSERT to GFX_KEY_RIGHT");
 
 /// @fn static uint8_t wmTranslateKey(uint8_t key, uint8_t ascii,
@@ -75,27 +75,34 @@ GFX_STATIC_ASSERT(sizeof(_wmKeySequenceEnds)
 /// @return Returns the number of bytes written to output.
 static uint8_t wmTranslateKey(uint8_t key, uint8_t ascii, uint8_t *output) {
   output[0] = '\x1b';
+
   if ((key >= GFX_KEY_F1) && (key <= GFX_KEY_F4)) {
     output[1] = 'O';
     output[2] = (uint8_t) ('P' + key - GFX_KEY_F1);
     return 3;
   }
+
   uint8_t end = 0;
+
   if ((key >= GFX_KEY_INSERT) && (key <= GFX_KEY_RIGHT)) {
     end = _wmKeySequenceEnds[key - GFX_KEY_INSERT];
   }
+
   if (end != 0) {
     output[1] = '[';
     output[2] = end;
+
     if (end >= 'A') {
       return 3;
     }
+
     output[3] = '~';
     return 4;
   } else if (ascii != 0) {
     output[0] = ascii;
     return 1;
   }
+
   return 0;
 }
 

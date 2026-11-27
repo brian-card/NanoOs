@@ -1182,11 +1182,13 @@ void consoleRemovePortCommandHandler(
 ) {
   uintptr_t portId = (uintptr_t) processMessageData(inputMessage);
   ConsolePort *consolePort = NULL;
+
   if ((processPid(processMessageFrom(inputMessage)) == schedulerPid)
     && (portId < CONSOLE_NUM_PORTS)
   ) {
     consolePort = &consoleState->consolePorts[portId];
   }
+
   if ((consolePort != NULL) && consolePortInUse(consolePort)
     && (consolePort->forwardingPid != PROCESS_ID_NOT_SET)
   ) {
@@ -1195,6 +1197,7 @@ void consoleRemovePortCommandHandler(
       consoleMessageCleanup(consolePort->pendingInput);
       consolePort->pendingInput = NULL;
     }
+
     consolePort->consoleBuffer->owner = PROCESS_ID_NOT_SET;
     consolePort->consoleBuffer->bufferAwaitingRelease = false;
     consolePort->consoleBuffer->holdsCompletedLine = false;
@@ -2156,6 +2159,7 @@ static ConsolePortOutput *_consolePortOutputs[CONSOLE_NUM_PORTS];
 static ConsolePortOutput* consolePortOutput(ConsolePort *consolePort) {
   uint8_t portId = consolePort->inputReadyArgs.portId;
   ConsolePortOutput *output = _consolePortOutputs[portId];
+
   if (output == NULL) {
     output = (ConsolePortOutput*) malloc(sizeof(ConsolePortOutput));
     if (output != NULL) {
@@ -2163,6 +2167,7 @@ static ConsolePortOutput* consolePortOutput(ConsolePort *consolePort) {
       _consolePortOutputs[portId] = output;
     }
   }
+
   return output;
 }
 
@@ -2178,10 +2183,13 @@ static bool consoleOutputTaken(ProcessMessage *processMessage) {
   struct timespec deadline;
   timespec_get(&deadline, TIME_UTC);
   deadline.tv_sec += CONSOLE_OUTPUT_TIMEOUT_MS / 1000;
+
   if (processMessageWaitForDone(processMessage, &deadline) != processSuccess) {
     return false;
   }
+
   processMessageRelease(processMessage);
+
   return true;
 }
 
@@ -2210,18 +2218,21 @@ static int consoleSendOutput(ConsolePort *consolePort, const char *string,
   if (output == NULL) {
     return 0;
   }
+
   if (output->message != NULL) {
     if (processMessageDone(output->message)) {
       processMessageRelease(output->message);
-    } else if (!waitForEarlier || !consoleOutputTaken(output->message)) {
+    } else if ((!waitForEarlier) || (!consoleOutputTaken(output->message))) {
       return 0;
     }
+
     output->message = NULL;
   }
 
   if (length >= CONSOLE_BUFFER_SIZE) {
     length = CONSOLE_BUFFER_SIZE - 1;
   }
+
   memcpy(output->text, string, length);
   output->text[length] = '\0';
   ProcessMessage *processMessage = initSendProcessMessageToPid(
@@ -2253,6 +2264,7 @@ static int consoleSendOutput(ConsolePort *consolePort, const char *string,
 /// length if a piece could not be sent.
 int consoleForwardString(ConsolePort *consolePort, const char *string) {
   size_t length = strlen(string);
+
   if (consolePortOutput(consolePort) == NULL) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       consolePort->outputPid,
@@ -2261,10 +2273,12 @@ int consoleForwardString(ConsolePort *consolePort, const char *string) {
     if (processMessage == NULL) {
       return 0;
     }
+
     processMessageWaitForDone(processMessage, NULL);
     processMessageRelease(processMessage);
     return (int) length;
   }
+
   size_t sent = 0;
   while (sent < length) {
     int piece = consoleSendOutput(consolePort, &string[sent], length - sent,
@@ -2272,8 +2286,10 @@ int consoleForwardString(ConsolePort *consolePort, const char *string) {
     if (piece == 0) {
       break;
     }
+
     sent += (size_t) piece;
   }
+
   return (int) sent;
 }
 

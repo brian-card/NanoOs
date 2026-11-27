@@ -48,6 +48,7 @@ void* vdpHoldText(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
   vdpBufferOutput(vdpOutput->heldText, (const uint8_t*) vdpOutput->textToHold,
     strlen(vdpOutput->textToHold));
+
   return args;
 }
 
@@ -65,10 +66,12 @@ void* vdpHoldReplay(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
   VdpOutputBuffer *heldText = vdpOutput->heldText;
   uint16_t start = 0;
+
   if (heldText->length == VDP_OUTPUT_BUFFER_SIZE) {
     while ((start < heldText->length) && (heldText->data[start] != '\n')) {
       start++;
     }
+
     start++;
   }
   if (start < heldText->length) {
@@ -79,8 +82,10 @@ void* vdpHoldReplay(void *args) {
       vdpOutput->replayText[heldText->length - start] = '\0';
     }
   }
+
   free(heldText);
   vdpOutput->heldText = NULL;
+
   return args;
 }
 
@@ -95,13 +100,16 @@ void* vdpHoldReplay(void *args) {
 static char* vdpAppendNumber(char *text, unsigned int number) {
   char digits[5];
   int numDigits = 0;
+
   do {
     digits[numDigits++] = (char) ('0' + (number % 10));
     number /= 10;
-  } while ((number > 0) && (numDigits < (int) sizeof(digits)));
+  } while ((number > 0) && (numDigits < ((int) sizeof(digits))));
+
   while (numDigits > 0) {
     *text++ = digits[--numDigits];
   }
+
   return text;
 }
 
@@ -119,9 +127,11 @@ static char* vdpAppendNumber(char *text, unsigned int number) {
 void* vdpLockKey(void *args) {
   VdpInput *input = (VdpInput*) args;
   uint8_t leds = 0;
+
   if (vdpUpdateLocks(input->parser.data, &input->numLock, &leds)) {
     vdpSetKeyboardLeds(leds);
   }
+
   return args;
 }
 
@@ -151,6 +161,7 @@ void* vdpReportSize(void *args) {
       processMessageInit(message,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
         input->sizeArgs, sizeof(*input->sizeArgs), /* waiting= */ true);
+
       if (sendProcessMessageToPid(input->consolePid, message)
         == processSuccess
       ) {
@@ -165,8 +176,10 @@ void* vdpReportSize(void *args) {
   if (vdpOutput->textState.resizeReportWanted == false) {
     return args;
   }
+
   char report[32] = "\033[48;";
   char *end = vdpAppendNumber(&report[5], rows);
+
   *end++ = ';';
   end = vdpAppendNumber(end, columns);
   *end++ = ';';
@@ -177,18 +190,23 @@ void* vdpReportSize(void *args) {
   uint8_t length = (uint8_t) (end - report);
   uint8_t numChunks = (uint8_t) ((length + CONSOLE_INPUT_READY_SIZE - 1)
     / CONSOLE_INPUT_READY_SIZE);
-  if (input->pendingLength + numChunks + length > VDP_PENDING_SIZE) {
+
+  if ((input->pendingLength + numChunks + length) > VDP_PENDING_SIZE) {
     return args;
   }
+
   for (uint8_t start = 0; start < length; start += CONSOLE_INPUT_READY_SIZE) {
     uint8_t chunk = length - start;
     if (chunk > CONSOLE_INPUT_READY_SIZE) {
       chunk = CONSOLE_INPUT_READY_SIZE;
     }
+
     input->pending[input->pendingLength++] = chunk;
     memcpy(&input->pending[input->pendingLength], &report[start], chunk);
     input->pendingLength += chunk;
   }
+
   vdpOutput->textState.resizeReportWanted = false;
+
   return args;
 }

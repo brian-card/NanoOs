@@ -72,6 +72,7 @@ static int property(const char *name) {
       return (int) ii;
     }
   }
+
   return -1;
 }
 
@@ -93,20 +94,24 @@ static int change(Wintest *wintest, int ii) {
   bool get = (strcmp(command, "get") == 0);
   bool remove = (strcmp(command, "remove") == 0);
   int words = 2;
+
   if (set) {
     words = 4;
   } else if (get) {
     words = 3;
   }
-  if ((!set && !get && !remove) || (ii + words >= wintest->argc)) {
+  if (((!set) && (!get) && (!remove)) || ((ii + words) >= wintest->argc)) {
     return -1;
   }
+
   uint8_t window = (uint8_t) strtol(argv[ii + 1], NULL, 0);
   uint8_t widget = (uint8_t) strtol(argv[ii + 2], NULL, 0);
+
   if (remove) {
     winRemoveWidget(session, window, widget);
     return ii + words + 1;
   }
+
   int which = property(argv[ii + 3]);
   if (which < 0) {
     return -1;
@@ -116,6 +121,7 @@ static int change(Wintest *wintest, int ii) {
     int rc = (which == WIN_PROP_TEXT)
       ? winGetText(session, window, widget, text, sizeof(text))
       : winGetValue(session, window, widget);
+
     if (rc < 0) {
       report(command, argv[ii + 1], rc);
     } else if (which == WIN_PROP_TEXT) {
@@ -123,11 +129,14 @@ static int change(Wintest *wintest, int ii) {
     } else {
       printf("wintest: get %d %d value %d\n", window, widget, rc);
     }
+
     return ii + words + 1;
   }
+
   const char *value = argv[ii + 4];
   int rc = 0;
   GfxRect rect;
+
   if (which == WIN_PROP_TEXT) {
     char *text = spaced(value);
     rc = (text == NULL) ? -ENOMEM : winSetText(session, window, widget, text);
@@ -135,6 +144,7 @@ static int change(Wintest *wintest, int ii) {
   } else if (which == WIN_PROP_ITEMS) {
     uint16_t size = 0;
     char *items = listItems(value, &size);
+
     rc = (items == NULL) ? -ENOMEM
       : winSetItems(session, window, widget, items, size);
     free(items);
@@ -145,7 +155,9 @@ static int change(Wintest *wintest, int ii) {
     rc = winSetWidget_(session, window, widget, (uint8_t) which,
       (uint16_t) strtol(value, NULL, 0), NULL, 0, NULL);
   }
+
   report(command, argv[ii + 1], rc);
+
   return ii + words + 1;
 }
 
@@ -161,9 +173,11 @@ static int change(Wintest *wintest, int ii) {
 void* wintestQuery(void *args) {
   Wintest *wintest = (Wintest*) args;
   int next = change(wintest, wintest->index);
+
   wintest->handled = (next >= 0);
   if (wintest->handled) {
     wintest->index = next;
   }
+
   return args;
 }

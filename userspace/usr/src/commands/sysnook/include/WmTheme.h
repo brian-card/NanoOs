@@ -104,7 +104,7 @@
 ///
 /// @brief The narrowest a decorated window can be:  the caption buttons, the
 /// title's inset, 4 characters of title, and the border.
-#define WM_MIN_WIDTH (WM_BUTTONS_WIDTH + WM_TITLE_INSET + 24 + 2 * WM_BORDER)
+#define WM_MIN_WIDTH (WM_BUTTONS_WIDTH + WM_TITLE_INSET + 24 + (2 * WM_BORDER))
 
 /// @def WM_MIN_HEIGHT
 ///

@@ -1824,6 +1824,7 @@ static __attribute__((noinline)) int configSysAddGraphics(char *value,
     schedFree(graphics);
     return (graphics == NULL) ? -ENOMEM : -EINVAL;
   }
+
   pathCollapse(graphics->argv[1]);
   _configSys->graphics = graphics;
 
@@ -1926,6 +1927,7 @@ static __attribute__((noinline)) int configSysStartGraphics(void) {
     logError("Could not use graphics device %s: %s\n",
       graphics->path, strerror(-returnValue));
   }
+
   return returnValue;
 }
 

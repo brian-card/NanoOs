@@ -1242,6 +1242,7 @@ static int addProcessIpcCapabilityMask(
   while ((messageTypes & (((uint32_t) 1) << firstType)) == 0) {
     firstType++;
   }
+
   int returnValue = addProcessIpcCapability(processDescriptor, destinationPid,
     signature, firstType);
   if (returnValue != 0) {
@@ -1285,6 +1286,7 @@ static void removeProcessIpcCapabilityMask(
   if (processDescriptor->ipcCapabilitiesDynamic == false) {
     return;
   }
+
   for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
     IpcCapability *capability = &processDescriptor->ipcCapabilities[ii];
     if ((capability->destinationPid == destinationPid)
@@ -1958,6 +1960,7 @@ int schedulerSetGraphics(ProcessId driverPid, const char *clientPath) {
 
   _schedulerState->graphicsDriverPid = driverPid;
   _schedulerState->graphicsClientPath = clientPath;
+
   return 0;
 }
 
@@ -1997,6 +2000,7 @@ static void schedulerReclaimProcessMessage(
 ) {
   ProcessMessage *message = &processDescriptor->message;
   ProcessDescriptor *receiver = processMessageTo(message);
+
   if ((processMessageInUse(message) != NULL)
     && (processMessageDone(message) == false)
     && (processMessageWaiting(message) == false)
@@ -2009,6 +2013,7 @@ static void schedulerReclaimProcessMessage(
   if (receiver != NULL) {
     processMessageQueueRemove(receiver, message);
   }
+
   memset(message, 0, sizeof(ProcessMessage));
 }
 
@@ -2043,6 +2048,7 @@ static void schedulerRevokeWindowClient(
 /// @return This function returns no value.
 static void schedulerWindowServerEnded(ProcessId serverPid) {
   _schedulerState->windowServerPid = 0;
+
   if (NANO_OS_MAX_SESSIONS > 0) {
     ProcessDescriptor *server = &allProcesses[serverPid - 1];
     removeProcessIpcCapability(server, schedulerPid,
@@ -2055,6 +2061,7 @@ static void schedulerWindowServerEnded(ProcessId serverPid) {
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_WINSIZE);
     schedulerCloseServicedSessions(serverPid, true);
   }
+
   for (ProcessId ii = 1; ii <= numProcesses; ii++) {
     if (allProcesses[ii - 1].windowClient) {
       schedulerRevokeWindowClient(&allProcesses[ii - 1], serverPid);
@@ -2086,13 +2093,16 @@ static __attribute__((noinline)) void schedulerWindowClientEnded(
       WIN_COMMAND_SIGNATURE | WIN_MSG_CLIENT_ENDED,
       (void*) (uintptr_t) processDescriptor->processId, 0,
       /* waiting= */ false);
+
     if (processMessageQueuePush(&allProcesses[serverPid - 1], processMessage)
       == processSuccess
     ) {
       return;
     }
+
     processMessageRelease(processMessage);
   }
+
   logError("Could not tell the window server process %d ended\n",
     processDescriptor->processId);
 }
@@ -2113,6 +2123,7 @@ static __attribute__((noinline)) void schedulerGraphicsClientEnded(
   ProcessDescriptor *processDescriptor
 ) {
   schedulerRevokeGraphics(processDescriptor);
+
   if (processDescriptor->processId == _schedulerState->windowServerPid) {
     schedulerWindowServerEnded(processDescriptor->processId);
   }
@@ -2123,14 +2134,17 @@ static __attribute__((noinline)) void schedulerGraphicsClientEnded(
       GFX_COMMAND_SIGNATURE | GFX_MSG_CLIENT_ENDED,
       (void*) (uintptr_t) processDescriptor->processId, 0,
       /* waiting= */ false);
+
     if (processMessageQueuePush(
         &allProcesses[_schedulerState->graphicsDriverPid - 1], processMessage)
       == processSuccess
     ) {
       return;
     }
+
     processMessageRelease(processMessage);
   }
+
   logError("Could not tell the graphics driver process %d ended\n",
     processDescriptor->processId);
 }
@@ -2150,9 +2164,11 @@ static inline void schedulerEndClient(ProcessDescriptor *processDescriptor) {
   if (processDescriptor->graphicsClient) {
     schedulerGraphicsClientEnded(processDescriptor);
   }
+
   if (processDescriptor->windowClient) {
     schedulerWindowClientEnded(processDescriptor);
   }
+
   if (NANO_OS_MAX_SESSIONS > 0) {
     schedulerCloseServicedSessions(processDescriptor->processId, false);
   }
@@ -2198,6 +2214,7 @@ void schedulerGraphicsProgramChanged(ProcessDescriptor *processDescriptor,
     schedulerRevokeGraphics(processDescriptor);
     return;
   }
+
   processDescriptor->graphicsClient = true;
 }
 
@@ -4242,8 +4259,10 @@ static int schedulerKillSlot(ProcessDescriptor *processDescriptor,
   int signal, bool selfKill
 ) {
   int errorNumber = 0;
+
   processDescriptor->exitStatus = (uint8_t) (128 + signal);
   processDescriptor->exitSignal = (uint8_t) signal;
+
   // Regardless of whether or not we succeed at terminating it, we have
   // to remove it from its queue.  We don't know which queue it's on,
   // though.  The fact that we're killing it makes it likely that it's hung.
@@ -4263,6 +4282,7 @@ static int schedulerKillSlot(ProcessDescriptor *processDescriptor,
         processDescriptor);
     }
   }
+
   processCompleteMessagesTo(processDescriptor);
 
   if (selfKill == false) {
@@ -4286,6 +4306,7 @@ static int schedulerKillSlot(ProcessDescriptor *processDescriptor,
     MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
       memoryManagerFreeProcessMemoryArgs);
     int freeStatus = processError;
+
     if (memoryManagerFreeProcessMemoryArgs != NULL) {
       memoryManagerFreeProcessMemoryArgs->pid = pid;
       memoryManagerFreeProcessMemoryArgs->returnValue = 0;
@@ -4296,6 +4317,7 @@ static int schedulerKillSlot(ProcessDescriptor *processDescriptor,
         sizeof(*memoryManagerFreeProcessMemoryArgs));
       MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
     }
+
     if (freeStatus != processSuccess) {
       logError(
         "Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY"
@@ -6098,9 +6120,11 @@ int schedulerRegisterWindowServerCommandHandler(
     processMessageSetDone(processMessage);
     return 0;
   }
+
   ProcessDescriptor *caller = processMessageFrom(processMessage);
 
   schedulerWindowServerArgs->errorNumber = 0;
+
   if (caller->graphicsClient == false) {
     schedulerWindowServerArgs->errorNumber = EPERM;
   } else if ((schedulerState->windowServerPid != 0)
@@ -6117,8 +6141,10 @@ int schedulerRegisterWindowServerCommandHandler(
   } else {
     schedulerState->windowServerPid = caller->processId;
   }
+
   schedulerWindowServerArgs->pid = schedulerState->windowServerPid;
   processMessageSetDone(processMessage);
+
   return 0;
 }
 
@@ -6143,11 +6169,13 @@ int schedulerConnectWindowServerCommandHandler(
     processMessageSetDone(processMessage);
     return 0;
   }
+
   ProcessDescriptor *caller = processMessageFrom(processMessage);
   ProcessId serverPid = schedulerState->windowServerPid;
 
   schedulerWindowServerArgs->errorNumber = 0;
   schedulerWindowServerArgs->pid = serverPid;
+
   if (serverPid == 0) {
     schedulerWindowServerArgs->errorNumber = ENOENT;
   } else if (serverPid == caller->processId) {
@@ -6167,7 +6195,9 @@ int schedulerConnectWindowServerCommandHandler(
       caller->windowClient = true;
     }
   }
+
   processMessageSetDone(processMessage);
+
   return 0;
 }
 
@@ -6201,6 +6231,7 @@ static char** schedulerSessionEnvironment(char **envp) {
   const char *home = NULL;
   size_t numVariables = 1;
   size_t stringBytes = 0;
+
   for (size_t ii = 0; (envp != NULL) && (envp[ii] != NULL); ii++) {
     if (strncmp(envp[ii], _pwdVariable, sizeof(_pwdVariable) - 1) == 0) {
       continue;
@@ -6209,24 +6240,30 @@ static char** schedulerSessionEnvironment(char **envp) {
     ) {
       home = &envp[ii][sizeof(_homeVariable) - 1];
     }
+
     numVariables++;
     stringBytes += strlen(envp[ii]) + 1;
   }
+
   if (home == NULL) {
     return NULL;
   }
+
   stringBytes += (sizeof(_pwdVariable) - 1) + strlen(home) + 1;
 
   size_t pointersAt
-    = (stringBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
+    = (stringBytes + sizeof(uintptr_t) - 1) & (~(sizeof(uintptr_t) - 1));
   char *block = (char*) schedMalloc(
     pointersAt + ((numVariables + 1) * sizeof(char*)));
+
   if (block == NULL) {
     return NULL;
   }
+
   char **sessionEnvp = (char**) &block[pointersAt];
   char *nextString = block;
   size_t index = 0;
+
   for (size_t ii = 0; envp[ii] != NULL; ii++) {
     if (strncmp(envp[ii], _pwdVariable, sizeof(_pwdVariable) - 1) != 0) {
       sessionEnvp[index++] = nextString;
@@ -6234,6 +6271,7 @@ static char** schedulerSessionEnvironment(char **envp) {
       nextString += strlen(envp[ii]) + 1;
     }
   }
+
   sessionEnvp[index++] = nextString;
   strcpy(nextString, _pwdVariable);
   strcat(nextString, home);
@@ -6294,6 +6332,7 @@ static void schedulerRevokeSessionGrants(uint8_t port, ProcessId inputPid,
 ) {
   bool inputShared = false;
   bool outputShared = false;
+
   for (ProcessId ii = 1; ii <= numProcesses; ii++) {
     ProcessDescriptor *processDescriptor = &allProcesses[ii - 1];
     if ((processDescriptor->shellSlot == SHELL_SLOT_SESSION)
@@ -6310,6 +6349,7 @@ static void schedulerRevokeSessionGrants(uint8_t port, ProcessId inputPid,
     removeProcessIpcCapability(&allProcesses[inputPid - 1], consolePid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_WINSIZE);
   }
+
   if (outputShared == false) {
     removeProcessIpcCapability(&allProcesses[consolePid - 1], outputPid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_FORWARD_STRING);
@@ -6337,13 +6377,16 @@ static void schedulerSessionEnded(ProcessId pid, uint8_t port) {
     processMessageInitInline(processMessage,
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_SESSION_ENDED,
       (void*) (uintptr_t) port, 0, /* waiting= */ false);
+
     if (processMessageQueuePush(&allProcesses[pid - 1], processMessage)
       == processSuccess
     ) {
       return;
     }
+
     processMessageRelease(processMessage);
   }
+
   logError("Could not tell process %d that session %d ended\n", pid, port);
 }
 
@@ -6362,6 +6405,7 @@ static __attribute__((noinline)) int schedulerEndSession(
   ProcessDescriptor *shell
 ) {
   uint8_t port = shell->consolePort;
+
   for (ProcessId ii = 1; ii <= numProcesses; ii++) {
     ProcessDescriptor *processDescriptor = &allProcesses[ii - 1];
     if ((processDescriptor != shell)
@@ -6375,12 +6419,14 @@ static __attribute__((noinline)) int schedulerEndSession(
 
   ProcessId outputPid = shell->shellOutputPid;
   ProcessId inputPid = _schedulerState->windowServerPid;
+
   schedulerRemovePort(port);
   shell->shellSlot = SHELL_SLOT_NONE;
   schedulerRevokeSessionGrants(port, inputPid, outputPid);
   removeProcessIpcCapability(&allProcesses[consolePid - 1], shell->processId,
     CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   schedulerSessionEnded(outputPid, port);
+
   if (inputPid != outputPid) {
     schedulerSessionEnded(inputPid, port);
   }
@@ -6390,16 +6436,20 @@ static __attribute__((noinline)) int schedulerEndSession(
   shell->restartFunction = NULL;
   schedFree(shell->shellPath);
   shell->shellPath = NULL;
+
   if (shell->envp != NULL) {
     // The pointer for the envp block is stored at envp[0], so free that.
     schedFree(shell->envp[0]);
     shell->envp = NULL;
   }
+
   schedulerSetDirCapabilities(shell, NULL);
   ipcCapabilitiesReset(shell);
+
   if (shell->overlay.overlayIdLength > 0) {
     schedFree(shell->overlay.overlayId);
   }
+
   shell->overlay.overlayId = NULL;
   shell->overlay.overlayIdLength = 0;
 
@@ -6421,13 +6471,16 @@ static void schedulerCloseSessionLater(uint8_t port) {
     processMessageInitInline(processMessage,
       SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_CLOSE_SESSION,
       (void*) (uintptr_t) port, 0, /* waiting= */ false);
+
     if (processMessageQueuePush(&allProcesses[schedulerPid - 1],
         processMessage) == processSuccess
     ) {
       return;
     }
+
     processMessageRelease(processMessage);
   }
+
   logError("Could not close session %d\n", port);
 }
 
@@ -6479,11 +6532,13 @@ static int schedulerStartSessionShell(ProcessDescriptor *shell,
   if (envp == NULL) {
     return ENOMEM;
   }
+
   char *shellPath = (char*) schedMalloc(strlen(login->shellPath) + 1);
   if (shellPath == NULL) {
     schedFree(envp[0]);
     return ENOMEM;
   }
+
   strcpy(shellPath, login->shellPath);
 
   threadSetContext(shell->mainThread, shell);
@@ -6504,9 +6559,11 @@ static int schedulerStartSessionShell(ProcessDescriptor *shell,
   shell->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
   schedulerSetBaseHalCapabilities(shell);
   shell->readyQueue = _schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR];
+
   if (shell->ipcCapabilitiesDynamic) {
     schedFree(shell->ipcCapabilities);
   }
+
   shell->ipcCapabilities = baseSupervisorIpcCapabilities;
   shell->numIpcCapabilities = sizeof(baseSupervisorIpcCapabilities)
     / sizeof(baseSupervisorIpcCapabilities[0]);
@@ -6516,6 +6573,7 @@ static int schedulerStartSessionShell(ProcessDescriptor *shell,
   addProcessIpcCapability(&allProcesses[consolePid - 1], shell->processId,
     CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   int returnValue = -EIO;
+
   if ((schedulerSetPortShell(port, shell->processId) == processSuccess)
     && (schedulerAssignPortToPid(port, shell->processId) == processSuccess)
   ) {
@@ -6523,6 +6581,7 @@ static int schedulerStartSessionShell(ProcessDescriptor *shell,
     returnValue = schedulerRunOverlayCommand(shell, shellPath, argv, envp);
     envp = NULL;
   }
+
   if (returnValue == 0) {
     processQueuePush(shell->readyQueue, shell);
     return 0;
@@ -6531,6 +6590,7 @@ static int schedulerStartSessionShell(ProcessDescriptor *shell,
   if (envp != NULL) {
     schedFree(envp[0]);
   }
+
   shell->shellSlot = SHELL_SLOT_NONE;
   shell->shellOutputPid = PROCESS_ID_NOT_SET;
   shell->consolePort = NO_CONSOLE_PORT;
@@ -6542,6 +6602,7 @@ static int schedulerStartSessionShell(ProcessDescriptor *shell,
     CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   schedulerSetDirCapabilities(shell, NULL);
   ipcCapabilitiesReset(shell);
+
   return -returnValue;
 }
 
@@ -6565,10 +6626,12 @@ static int schedulerOpenSession(SchedulerState *schedulerState,
   if (caller->processId != schedulerState->windowServerPid) {
     return EPERM;
   }
+
   ProcessId display = args->display;
   if ((display == 0) || (display > numProcesses)) {
     return EINVAL;
   }
+
   ProcessDescriptor *displayDescriptor = &allProcesses[display - 1];
   if ((processRunning(displayDescriptor) == false)
     || (displayDescriptor->userId != caller->userId)
@@ -6577,10 +6640,13 @@ static int schedulerOpenSession(SchedulerState *schedulerState,
   ) {
     return EINVAL;
   }
+
   ProcessDescriptor *login = NULL;
+
   if (caller->parentPid != 0) {
     login = &allProcesses[caller->parentPid - 1];
   }
+
   if ((login == NULL) || (login->shellSlot == SHELL_SLOT_NONE)
     || (login->shellPath == NULL) || (login->userId != caller->userId)
   ) {
@@ -6592,8 +6658,10 @@ static int schedulerOpenSession(SchedulerState *schedulerState,
   if (portId < 0) {
     return -portId;
   }
+
   int status = EAGAIN;
   ProcessDescriptor *shell = processQueuePop(schedulerState->freeQueue);
+
   if (shell != NULL) {
     status = schedulerStartSessionShell(shell, caller, login,
       (uint8_t) portId, display);
@@ -6601,6 +6669,7 @@ static int schedulerOpenSession(SchedulerState *schedulerState,
       processQueuePush(schedulerState->freeQueue, shell);
     }
   }
+
   if (status != 0) {
     schedulerRemovePort((uint8_t) portId);
     schedulerRevokeSessionGrants((uint8_t) portId, caller->processId,
@@ -6610,6 +6679,7 @@ static int schedulerOpenSession(SchedulerState *schedulerState,
 
   args->port = (uint8_t) portId;
   args->shell = shell->processId;
+
   return 0;
 }
 
@@ -6639,6 +6709,7 @@ int schedulerOpenSessionCommandHandler(
   args->status = (uint8_t) schedulerOpenSession(schedulerState,
     processMessageFrom(processMessage), args);
   processMessageSetDone(processMessage);
+
   return 0;
 }
 
@@ -6661,6 +6732,7 @@ int schedulerCloseSessionCommandHandler(
   ProcessDescriptor *caller = processMessageFrom(processMessage);
   SchedulerOpenSessionArgs *args = NULL;
   uint8_t port = 0;
+
   if (caller->processId == schedulerPid) {
     port = (uint8_t) (uintptr_t) processMessageData(processMessage);
   } else {
@@ -6669,11 +6741,13 @@ int schedulerCloseSessionCommandHandler(
       processMessageSetDone(processMessage);
       return 0;
     }
+
     port = args->port;
   }
 
   ProcessDescriptor *shell = schedulerSessionShell(port);
   uint8_t status = 0;
+
   if ((args != NULL)
     && (caller->processId != schedulerState->windowServerPid)
   ) {
@@ -6692,6 +6766,7 @@ int schedulerCloseSessionCommandHandler(
   } else {
     processMessageRelease(processMessage);
   }
+
   return 0;
 }
 

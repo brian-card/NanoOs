@@ -56,6 +56,7 @@ static WmClient* wmClientFind(WmState *state, ProcessId pid) {
       return state->clients[ii];
     }
   }
+
   return NULL;
 }
 
@@ -88,6 +89,7 @@ static bool wmCollect(WmState *state, WmClient *client) {
     client->message = NULL;
     state->numPosts--;
   }
+
   return client->message == NULL;
 }
 
@@ -102,6 +104,7 @@ static bool wmCollect(WmState *state, WmClient *client) {
 /// @return This function returns no value.
 static void wmForgetClient(WmState *state, ProcessId pid) {
   wmRemoveWindows(state, pid);
+
   for (uint8_t ii = 0; ii < state->numClients; ii++) {
     WmClient *client = state->clients[ii];
     if (client->pid == pid) {
@@ -109,6 +112,7 @@ static void wmForgetClient(WmState *state, ProcessId pid) {
         processMessageRelease(client->message);
         state->numPosts--;
       }
+
       MESSAGE_ARGS_DESTROY(client->args);
       free(client);
       state->numClients--;
@@ -136,6 +140,7 @@ static void wmHello(WmState *state, ProcessId pid, WinHelloArgs *helloArgs) {
       helloArgs->status = WIN_ERR_NO_MEMORY;
       return;
     }
+
     client = (WmClient*) calloc(1, sizeof(WmClient));
     if (client != NULL) {
       client->args = MESSAGE_ARGS_CREATE(WinEventsArgs,
@@ -146,12 +151,15 @@ static void wmHello(WmState *state, ProcessId pid, WinHelloArgs *helloArgs) {
       helloArgs->status = WIN_ERR_NO_MEMORY;
       return;
     }
+
     client->pid = pid;
     state->clients[state->numClients++] = client;
   }
+
   client->leaving = false;
 
   GfxDisplay *display = &state->display;
+
   helloArgs->role = WIN_ROLE_NONE;
   helloArgs->cellWidth = display->builtInFont.glyphW;
   helloArgs->cellHeight = display->builtInFont.glyphH;
@@ -179,6 +187,7 @@ static void wmQueue(WmClient *client, const WinEvent *event) {
   if (client->leaving) {
     return;
   }
+
   for (uint8_t ii = 0; ii < client->numPending; ii++) {
     WinEvent *pending = &client->pending[ii];
     if ((event->type == WIN_EVENT_RESIZED) && (pending->type == event->type)
@@ -188,6 +197,7 @@ static void wmQueue(WmClient *client, const WinEvent *event) {
       return;
     }
   }
+
   if (client->numPending < WM_MAX_PENDING) {
     client->pending[client->numPending++] = *event;
   } else {
@@ -207,28 +217,33 @@ static void wmQueue(WmClient *client, const WinEvent *event) {
 ///
 /// @return This function returns no value.
 static void wmPost(WmState *state, WmClient *client) {
-  if ((client->numPending == 0) || !wmCollect(state, client)
+  if ((client->numPending == 0) || (!wmCollect(state, client))
     || (state->numPosts >= WM_MAX_POSTS)
   ) {
     return;
   }
+
   ProcessMessage *message = getAvailableMessage();
   if (message == NULL) {
     return;
   }
+
   uint8_t count = client->numPending;
   if (count > WIN_EVENTS_PER_MESSAGE) {
     count = WIN_EVENTS_PER_MESSAGE;
   }
+
   client->args->count = count;
   memcpy(client->args->events, client->pending, count * sizeof(WinEvent));
   processMessageInit(message, WIN_COMMAND_SIGNATURE | WIN_MSG_EVENTS,
     client->args, sizeof(*client->args), /* waiting= */ true);
+
   if (sendProcessMessageToPid(client->pid, message) != processSuccess) {
     processMessageRelease(message);
     client->numPending = 0;
     return;
   }
+
   client->message = message;
   state->numPosts++;
   client->numPending -= count;
@@ -257,21 +272,26 @@ void* wmClientFlush(void *args) {
       wmReleaseChanged(state);
     }
   }
+
   for (uint8_t ii = 0; ii < state->numOutbox; ii++) {
     WmClient *client = wmClientFind(state, state->outbox[ii].pid);
     if (client != NULL) {
       wmQueue(client, &state->outbox[ii].event);
     }
   }
+
   state->numOutbox = 0;
   state->eventsWaiting = false;
+
   for (uint8_t ii = 0; ii < state->numClients; ii++) {
     WmClient *client = state->clients[ii];
     wmCollect(state, client);
     wmPost(state, client);
     state->eventsWaiting |= (client->numPending > 0);
   }
+
   state->eventsWaiting |= (state->heldWindow != 0);
+
   return args;
 }
 
@@ -287,6 +307,7 @@ void* wmClientStart(void *args) {
   if (windowServerRegister() != 0) {
     fputs("sysnook: not registered as the window server\n", stderr);
   }
+
   return args;
 }
 
@@ -319,9 +340,11 @@ void* wmClientMessage(void *args) {
   }
 
   processMessageSetDone(message);
+
   if (waiting == false) {
     processMessageRelease(message);
   }
+
   return args;
 }
 
@@ -340,13 +363,16 @@ static void wmClientDrain(void) {
     int64_t type = processMessageType(message);
     void *data = processMessageData(message);
     bool waiting = processMessageWaiting(message);
+
     if ((waiting == false) && (data != NULL)
-      && ((type & ~WIN_MSG_TYPE_MASK) == WIN_COMMAND_SIGNATURE)
+      && ((type & (~WIN_MSG_TYPE_MASK)) == WIN_COMMAND_SIGNATURE)
       && (type != (WIN_COMMAND_SIGNATURE | WIN_MSG_CLIENT_ENDED))
     ) {
       MESSAGE_ARGS_DESTROY(data);
     }
+
     processMessageSetDone(message);
+
     if (waiting == false) {
       processMessageRelease(message);
     }
@@ -367,21 +393,27 @@ static void printTimes(const char *kind, WmTimes *times) {
   if (kept > WM_TIMED_FRAMES) {
     kept = WM_TIMED_FRAMES;
   }
+
   for (uint16_t ii = 1; ii < kept; ii++) {
     uint16_t value = times->ms[ii];
     uint16_t jj = ii;
+
     while ((jj > 0) && (times->ms[jj - 1] > value)) {
       times->ms[jj] = times->ms[jj - 1];
       jj--;
     }
+
     times->ms[jj] = value;
   }
+
   unsigned int median = 0;
   unsigned int longest = 0;
+
   if (kept > 0) {
     median = times->ms[kept / 2];
     longest = times->ms[kept - 1];
   }
+
   printf("sysnook: %s frames %u median %u ms max %u ms\n", kind,
     (unsigned int) times->count, median, longest);
 }
@@ -410,9 +442,11 @@ void* wmClientEnd(void *args) {
       processYield();
       message = getAvailableMessage();
     }
+
     if (message != NULL) {
       processMessageInit(message, WIN_COMMAND_SIGNATURE | WIN_MSG_DISCONNECTED,
         NULL, 0, /* waiting= */ false);
+
       if (sendProcessMessageToPid(state->clients[ii]->pid, message)
         != processSuccess
       ) {
@@ -420,28 +454,36 @@ void* wmClientEnd(void *args) {
       }
     }
   }
+
   for (int tries = 0; (state->numPosts > 0) && (tries < WM_DISCONNECT_TRIES);
     tries++
   ) {
     for (uint8_t ii = 0; ii < state->numClients; ii++) {
       wmCollect(state, state->clients[ii]);
     }
+
     processYield();
   }
+
   while (state->numClients > 0) {
     WmClient *client = state->clients[--state->numClients];
     wmRemoveWindows(state, client->pid);
+
     if (client->message != NULL) {
       processMessageRelease(client->message);
     }
+
     MESSAGE_ARGS_DESTROY(client->args);
     free(client);
   }
+
   state->numPosts = 0;
+
   if (state->times != NULL) {
     printTimes("move", &state->times[WM_TIMED_MOVE]);
     printTimes("resize", &state->times[WM_TIMED_RESIZE]);
     printTimes("echo", &state->times[WM_TIMED_ECHO]);
   }
+
   return args;
 }

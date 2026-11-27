@@ -54,15 +54,19 @@ void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
 ) {
   const uint8_t *data = parser->data;
   GfxEvent event;
+
   memset(&event, 0, sizeof(event));
   bool motion = false;
+
   if (parser->command == VDP_PACKET_KEYBOARD) {
     event.type = GFX_EVENT_KEY;
     event.keycode = vdpGfxKey(data, numLock, &event.ascii);
-    event.modifiers = data[1] & ~GFX_MOD_NUM_LOCK;
+    event.modifiers = data[1] & (~GFX_MOD_NUM_LOCK);
+
     if (numLock) {
       event.modifiers |= GFX_MOD_NUM_LOCK;
     }
+
     event.down = data[3];
   } else if (parser->command == VDP_PACKET_MOUSE) {
     event.x = (int16_t) (data[0] | (data[1] << 8));
@@ -76,6 +80,7 @@ void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
   }
 
   GfxEvent *slot = &queue->events[queue->count];
+
   if ((motion == true) && (state->motionQueued == true) && (queue->count > 0)) {
     slot--;
     event.wheel = (int8_t) (event.wheel + slot->wheel);
@@ -87,6 +92,7 @@ void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
   } else {
     queue->count++;
   }
+
   state->motionQueued = motion;
   *slot = event;
 }

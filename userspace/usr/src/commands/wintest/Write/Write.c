@@ -86,6 +86,7 @@ static int burst(Wintest *wintest, const char *window, int count) {
     uint8_t operation[WIN_GRID_PUT_SIZE(WINTEST_BURST_TEXT_SIZE)];
     int length = snprintf((char*) &operation[WIN_GRID_PUT_TEXT],
       WINTEST_BURST_TEXT_SIZE, "write %d", ii);
+
     operation[WIN_GRID_TAG] = WIN_GRID_PUT;
     operation[WIN_GRID_PUT_ROW] = 0;
     operation[WIN_GRID_PUT_COLUMN] = 0;
@@ -98,6 +99,7 @@ static int burst(Wintest *wintest, const char *window, int count) {
       return rc;
     }
   }
+
   return 0;
 }
 
@@ -119,15 +121,17 @@ void* wintestWrite(void *args) {
   int ii = wintest->index;
   const char *command = argv[ii++];
   const char *first = (ii < argc) ? argv[ii] : NULL;
-  const char *second = (ii + 1 < argc) ? argv[ii + 1] : NULL;
+  const char *second = ((ii + 1) < argc) ? argv[ii + 1] : NULL;
   uint8_t operation[WIN_GRID_PUT_SIZE(UINT8_MAX)];
   long values[WINTEST_MAX_GRID_FIELDS];
   int count = 0;
   int rc = 0;
+
   wintest->handled = false;
+
   if (second == NULL) {
     return args;
-  } else if ((strcmp(command, "put") == 0) && (ii + 2 < argc)
+  } else if ((strcmp(command, "put") == 0) && ((ii + 2) < argc)
     && parseNumbers(second, values,
       WINTEST_GRID_FIELDS(WIN_GRID_PUT_ROW, WIN_GRID_PUT_LENGTH))
   ) {
@@ -135,6 +139,7 @@ void* wintestWrite(void *args) {
     if (length > UINT8_MAX) {
       length = UINT8_MAX;
     }
+
     operation[WIN_GRID_TAG] = WIN_GRID_PUT;
     operation[WIN_GRID_PUT_LENGTH] = (uint8_t) length;
     memcpy(&operation[WIN_GRID_PUT_TEXT], argv[ii + 2], length);
@@ -174,16 +179,22 @@ void* wintestWrite(void *args) {
   } else {
     return args;
   }
+
   wintest->handled = true;
+
   for (int jj = 0; jj < count; jj++) {
     operation[WIN_GRID_TAG + 1 + jj] = (uint8_t) values[jj];
   }
+
   if (count > 0) {
     rc = write(wintest, first, operation, (uint16_t) rc);
   }
+
   if (rc < 0) {
     printf("wintest: %s %s: %s\n", command, first, strerror(-rc));
   }
+
   wintest->index = ii + 2;
+
   return args;
 }

@@ -80,5 +80,6 @@ void* wintestDemo(void *args) {
   if (*text != NULL) {
     memcpy(*text, _demoScript, sizeof(_demoScript));
   }
+
   return args;
 }

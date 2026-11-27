@@ -814,7 +814,7 @@ typedef enum WinWidgetKind {
 /// @brief The size of a widget record's header.
 #define WIN_RECORD_HEADER_SIZE 12
 
-GFX_STATIC_ASSERT(WIN_RECORD_RECT + 4 * sizeof(int16_t)
+GFX_STATIC_ASSERT((WIN_RECORD_RECT + (4 * sizeof(int16_t)))
   == WIN_RECORD_HEADER_SIZE,
   "A widget record's header ends with its rectangle");
 

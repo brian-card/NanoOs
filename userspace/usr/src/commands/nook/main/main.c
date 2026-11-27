@@ -48,15 +48,18 @@ int main(int argc, char **argv) {
   // because we specified POSIX_SPAWN_SYSTEM in the attributes, which drops
   // all of the environment variables regardless of what we provide.
   int returnValue = posix_spawn(&pid, "sysnook", NULL, &attr, argv, NULL);
+
   posix_spawnattr_destroy(&attr);
+
   if (returnValue != 0) {
     fprintf(stderr, "nook: %s\n", strerror(returnValue));
     return 1;
   }
 
   int status = 0;
-  if ((waitpid(pid, &status, 0) != pid) || !WIFEXITED(status)) {
+  if ((waitpid(pid, &status, 0) != pid) || (!WIFEXITED(status))) {
     return 1;
   }
+
   return WEXITSTATUS(status);
 }

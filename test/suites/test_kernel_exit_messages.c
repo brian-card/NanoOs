@@ -212,9 +212,11 @@ static void* oneWaySender(void *args) {
     /* waiting= */ false);
   oneWaySent = processMessage;
   processMessageQueuePush(oneWayReceiver, processMessage);
+
   while (oneWayPopped == false) {
     processYield();
   }
+
   return NULL;
 }
 
@@ -236,6 +238,7 @@ NANO_OS_KERNEL_TEST_WITH(exit_messages, a_popped_one_way_message_outlives_its_se
   posix_spawnattr_t attr = { .flags = 0 };
   pid_t pid = 0;
   char *argv[] = { "sender", NULL };
+
   NANO_OS_ASSERT_EQ_INT(0,
     nanoOsSpawn(&pid, "/usr/bin/sender", NULL, &attr, argv, NULL));
 

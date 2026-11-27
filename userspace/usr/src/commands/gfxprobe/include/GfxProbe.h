@@ -105,7 +105,9 @@ static inline int findDriver(ProcessId *pid) {
     printf("gfxprobe: no graphics driver (%d)\n", status);
     return 1;
   }
+
   printf("gfxprobe: graphics driver is pid %d\n", (int) *pid);
+
   return 0;
 }
 
@@ -119,6 +121,7 @@ static inline int findDriver(ProcessId *pid) {
 /// @return Returns 0 if the driver was found, nonzero otherwise.
 static inline int connectDriver(GfxDisplay *disp) {
   memset(disp, 0, sizeof(*disp));
+
   return findDriver(&disp->driverPid);
 }
 
@@ -147,12 +150,14 @@ static inline void* probeFont(GfxFontDesc *desc) {
   if (bitmap != NULL) {
     memset(bitmap, 0x18, PROBE_FONT_SIZE);
   }
+
   desc->glyphW = 8;
   desc->glyphH = 8;
   desc->firstChar = 'A';
   desc->numChars = 1;
   desc->bitmap = bitmap;
   desc->size = PROBE_FONT_SIZE;
+
   return bitmap;
 }
 
@@ -169,15 +174,19 @@ static inline void* readFile(const char *path, size_t *size) {
   if (file == NULL) {
     return NULL;
   }
+
   fseek(file, 0, SEEK_END);
   long length = ftell(file);
+
   fseek(file, 0, SEEK_SET);
-  char *data = (char*) malloc((size_t) length + 1);
+  char *data = (char*) malloc(((size_t) length) + 1);
   if (data != NULL) {
     *size = fread(data, 1, (size_t) length, file);
     data[*size] = '\0';
   }
+
   fclose(file);
+
   return data;
 }
 

@@ -49,6 +49,7 @@ void* gfxprobeResources(void *args) {
   GfxDisplay *disp = probeArgs->disp;
   GfxFontDesc font;
   void *bitmap = probeFont(&font);
+
   if (bitmap == NULL) {
     printf("gfxprobe: no memory\n");
     probeArgs->status = 1;
@@ -58,6 +59,7 @@ void* gfxprobeResources(void *args) {
   GfxHandle handle = GFX_INVALID_HANDLE;
   GfxImageDesc image = { 1, 1, GFX_FMT_RGBA2222, NULL, 1 };
   uint16_t width = 0, height = 0;
+
   report("OPEN_DISPLAY", gfxOpenDisplay(disp, GFX_DRIVER_PROCESS_NAME,
     640, 480));
   report("GET_SURFACE_SIZE", gfxGetSurfaceSize(disp, &width, &height));
@@ -70,5 +72,6 @@ void* gfxprobeResources(void *args) {
 
   free(bitmap);
   probeArgs->status = 0;
+
   return args;
 }

@@ -131,13 +131,16 @@ static inline bool parseNumbers(const char *text, long *values, int count) {
   for (int ii = 0; ii < count; ii++) {
     char *end = NULL;
     values[ii] = strtol(text, &end, 0);
-    if ((end == text) || ((ii < count - 1) && (*end != ','))
-      || ((ii == count - 1) && (*end != '\0'))
+
+    if ((end == text) || ((ii < (count - 1)) && (*end != ','))
+      || ((ii == (count - 1)) && (*end != '\0'))
     ) {
       return false;
     }
+
     text = end + 1;
   }
+
   return true;
 }
 
@@ -163,14 +166,17 @@ static inline bool parseNumbers(const char *text, long *values, int count) {
 static inline char* spaced(const char *word) {
   size_t size = strlen(word) + 1;
   char *text = (char*) malloc(size);
+
   if (text != NULL) {
     memcpy(text, word, size);
   }
+
   for (char *at = text; (at != NULL) && (*at != '\0'); at++) {
     if (*at == WINTEST_SPACE) {
       *at = ' ';
     }
   }
+
   return text;
 }
 
@@ -187,6 +193,7 @@ static inline uint8_t windowWord(const Wintest *wintest, const char *word) {
   if (strcmp(word, ".") == 0) {
     return wintest->last;
   }
+
   return (uint8_t) strtol(word, NULL, 0);
 }
 
@@ -203,13 +210,17 @@ static inline uint8_t windowWord(const Wintest *wintest, const char *word) {
 /// no memory.
 static inline char* listItems(const char *word, uint16_t *size) {
   char *items = spaced((strcmp(word, "-") == 0) ? "" : word);
+
   *size = 0;
+
   for (char *at = items; (at != NULL) && (*at != '\0'); at++) {
     if (*at == ',') {
       *at = '\0';
     }
+
     (*size)++;
   }
+
   return items;
 }
 
@@ -226,10 +237,12 @@ static inline bool parseRect(const char *text, GfxRect *rect) {
   if (!parseNumbers(text, values, (int) WINTEST_COUNT(values))) {
     return false;
   }
+
   rect->x = (int16_t) values[0];
   rect->y = (int16_t) values[1];
   rect->w = (int16_t) values[2];
   rect->h = (int16_t) values[3];
+
   return true;
 }
 
@@ -247,8 +260,10 @@ static inline WinTemplate* pending(Wintest *wintest) {
     if (buffer == NULL) {
       return NULL;
     }
+
     winTemplateBegin(&wintest->widgets, buffer, WINTEST_TEMPLATE_SIZE);
   }
+
   return &wintest->widgets;
 }
 
@@ -268,15 +283,18 @@ static inline uint8_t parseWidgetFlags(const char *names) {
     WIN_WIDGET_CANCEL, WIN_WIDGET_PASSWORD, WIN_WIDGET_READ_ONLY,
   };
   uint8_t flags = 0;
+
   for (size_t ii = 0; ii < WINTEST_COUNT(known); ii++) {
     const char *found = strstr(names, known[ii]);
     size_t length = strlen(known[ii]);
+
     if ((found != NULL) && ((found == names) || (found[-1] == ','))
       && ((found[length] == '\0') || (found[length] == ','))
     ) {
       flags |= bits[ii];
     }
   }
+
   return flags;
 }
 
@@ -290,6 +308,7 @@ static inline uint8_t parseWidgetFlags(const char *names) {
 /// @return Returns the bits.
 static inline uint8_t parseAnchor(const char *letters) {
   uint8_t anchor = 0;
+
   for (const char *at = letters; *at != '\0'; at++) {
     if (*at == 'l') {
       anchor |= WIN_ANCHOR_LEFT;
@@ -301,6 +320,7 @@ static inline uint8_t parseAnchor(const char *letters) {
       anchor |= WIN_ANCHOR_BOTTOM;
     }
   }
+
   return anchor;
 }
 
@@ -322,6 +342,7 @@ static inline int options(Wintest *wintest, int ii, uint8_t *flags,
 ) {
   *flags = 0;
   *anchor = WIN_ANCHOR_LEFT | WIN_ANCHOR_TOP;
+
   while (ii < wintest->argc) {
     const char *word = wintest->argv[ii];
     if (strncmp(word, "flags=", WINTEST_LITERAL_LENGTH("flags=")) == 0) {
@@ -333,8 +354,10 @@ static inline int options(Wintest *wintest, int ii, uint8_t *flags,
     } else {
       break;
     }
+
     ii++;
   }
+
   return ii;
 }
 

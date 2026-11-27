@@ -107,24 +107,29 @@ WIN_OUT_OF_LINE WinError winCall_(WinSession *session, uint8_t type,
   if (args == NULL) {
     return WIN_ERR_NO_MEMORY;
   }
+
   *((uint8_t*) args) = WIN_ERR_DISCONNECTED;
   ProcessMessage *message = getAvailableMessage();
   if (message == NULL) {
     return WIN_ERR_NO_MEMORY;
   }
+
   processMessageInit(message, WIN_COMMAND_SIGNATURE | type,
     args, size, /* waiting= */ true);
+
   if (sendProcessMessageToPid(session->server, message) != processSuccess) {
     processMessageRelease(message);
     session->connected = false;
     return WIN_ERR_DISCONNECTED;
   }
+
   processMessageWaitForDone(message, NULL);
   processMessageRelease(message);
   WinError status = (WinError) *((uint8_t*) args);
   if (status == WIN_ERR_DISCONNECTED) {
     session->connected = false;
   }
+
   return status;
 }
 
@@ -148,12 +153,15 @@ WIN_OUT_OF_LINE void winPost_(WinSession *session, uint8_t type, void *args,
   if (message != NULL) {
     processMessageInit(message, WIN_COMMAND_SIGNATURE | type,
       args, size, /* waiting= */ false);
+
     if (sendProcessMessageToPid(session->server, message) == processSuccess) {
       return;
     }
+
     processMessageRelease(message);
     session->connected = false;
   }
+
   if (args != NULL) {
     MESSAGE_ARGS_DESTROY(args);
   }
@@ -180,6 +188,7 @@ WIN_OUT_OF_LINE int winErrno(WinError status) {
   } else if (status == WIN_ERR_NOT_SUPPORTED) {
     return -ENOTSUP;
   }
+
   return -ENOTCONN;
 }
 
@@ -201,8 +210,10 @@ static inline WinError winConnect(WinSession *session) {
     } else if (errno == EPERM) {
       return WIN_ERR_PERMISSION;
     }
+
     return WIN_ERR_DISCONNECTED;
   }
+
   session->server = server;
   session->connected = true;
 
@@ -212,7 +223,9 @@ static inline WinError winConnect(WinSession *session) {
   if (status == WIN_OK) {
     session->hello = *helloArgs;
   }
+
   MESSAGE_ARGS_FREE(helloArgs);
+
   return status;
 }
 
@@ -228,8 +241,10 @@ static inline void winDisconnect(WinSession *session) {
   if (message == NULL) {
     return;
   }
+
   processMessageInit(message, WIN_COMMAND_SIGNATURE | WIN_MSG_GOODBYE,
     NULL, 0, /* waiting= */ false);
+
   if (sendProcessMessageToPid(session->server, message) != processSuccess) {
     processMessageRelease(message);
   }
@@ -259,16 +274,20 @@ WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
   const uint8_t *widgets, uint16_t templateSize
 ) {
   MESSAGE_ARGS_ALLOCATE(WinCreateWindowArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   size_t length = 0;
+
   if (title != NULL) {
     length = strlen(title);
     if (length > WIN_TITLE_MAX) {
       length = WIN_TITLE_MAX;
     }
   }
+
   args->layer = layer;
   args->flags = flags;
   args->state = WIN_STATE_NORMAL;
@@ -279,10 +298,12 @@ WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
   args->title = NULL;
   args->widgets = NULL;
   WinError status = WIN_ERR_NO_MEMORY;
+
   if (length > 0) {
     args->title = (const char*) MESSAGE_BUFFER_SHARE(title, length,
       MESSAGE_BUFFER_IN, session->server);
   }
+
   if (args->templateSize > 0) {
     args->widgets = (const uint8_t*) MESSAGE_BUFFER_SHARE(widgets,
       args->templateSize, MESSAGE_BUFFER_IN, session->server);
@@ -295,14 +316,19 @@ WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
   if (args->widgets != NULL) {
     MESSAGE_BUFFER_UNSHARE(args->widgets, widgets, MESSAGE_BUFFER_IN);
   }
+
   if (args->title != NULL) {
     MESSAGE_BUFFER_UNSHARE(args->title, title, MESSAGE_BUFFER_IN);
   }
+
   int result = winErrno(status);
+
   if (status == WIN_OK) {
     result = args->window;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return result;
 }
 
@@ -344,20 +370,25 @@ WIN_OUT_OF_LINE int winGridWrite(WinSession *session, uint8_t window,
   uint8_t widget, const uint8_t *operations, uint16_t size
 ) {
   MESSAGE_ARGS_ALLOCATE(WinBufferArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   args->window = window;
   args->widget = widget;
   args->size = size;
   args->data = (const uint8_t*) MESSAGE_BUFFER_SHARE(operations, size,
     MESSAGE_BUFFER_IN, session->server);
   WinError status = WIN_ERR_NO_MEMORY;
+
   if (args->data != NULL) {
     status = winCall_(session, WIN_MSG_GRID_WRITE, args, sizeof(*args));
     MESSAGE_BUFFER_UNSHARE(args->data, operations, MESSAGE_BUFFER_IN);
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return winErrno(status);
 }
 
@@ -412,10 +443,11 @@ static inline void winCanvasBegin(WinCanvas *canvas, uint8_t *buffer,
 WIN_OUT_OF_LINE void winCanvasRecord_(WinCanvas *canvas, uint8_t tag,
   const void *params, uint16_t size
 ) {
-  if (canvas->size + 1 + size > canvas->capacity) {
+  if ((canvas->size + 1 + size) > canvas->capacity) {
     canvas->full = true;
     return;
   }
+
   canvas->buffer[canvas->size] = tag;
   memcpy(&canvas->buffer[canvas->size + 1], params, size);
   canvas->size = (uint16_t) (canvas->size + 1 + size);
@@ -488,6 +520,7 @@ WIN_OUT_OF_LINE void winCanvasText(WinCanvas *canvas, GfxPoint at,
   if (length > UINT8_MAX) {
     length = UINT8_MAX;
   }
+
   uint8_t params[sizeof(GfxPoint) + 1 + UINT8_MAX];
   memcpy(params, &at, sizeof(at));
   params[sizeof(GfxPoint)] = (uint8_t) length;
@@ -514,15 +547,19 @@ WIN_OUT_OF_LINE int winSetCanvas(WinSession *session, uint8_t window,
   if (canvas->full) {
     return -ENOMEM;
   }
+
   MESSAGE_ARGS_ALLOCATE(WinBufferArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   args->window = window;
   args->widget = widget;
   args->size = canvas->size;
   args->data = NULL;
   WinError status = WIN_ERR_NO_MEMORY;
+
   if (canvas->size > 0) {
     args->data = (const uint8_t*) MESSAGE_BUFFER_SHARE(canvas->buffer,
       canvas->size, MESSAGE_BUFFER_IN, session->server);
@@ -533,7 +570,9 @@ WIN_OUT_OF_LINE int winSetCanvas(WinSession *session, uint8_t window,
   if (args->data != NULL) {
     MESSAGE_BUFFER_UNSHARE(args->data, canvas->buffer, MESSAGE_BUFFER_IN);
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return winErrno(status);
 }
 
@@ -619,10 +658,12 @@ WIN_OUT_OF_LINE bool winAddRecord_(WinTemplate *widgets, uint8_t kind,
   if (length > UINT8_MAX) {
     length = UINT8_MAX;
   }
+
   size_t size = WIN_RECORD_HEADER_SIZE + numFields + 1 + length;
-  if (widgets->size + size > widgets->capacity) {
+  if ((widgets->size + size) > widgets->capacity) {
     return false;
   }
+
   uint8_t *record = &widgets->buffer[widgets->size];
   record[WIN_RECORD_KIND] = kind;
   record[WIN_RECORD_ID] = id;
@@ -633,6 +674,7 @@ WIN_OUT_OF_LINE bool winAddRecord_(WinTemplate *widgets, uint8_t kind,
   record[WIN_RECORD_HEADER_SIZE + numFields] = (uint8_t) length;
   memcpy(&record[WIN_RECORD_HEADER_SIZE + numFields + 1], text, length);
   widgets->size = (uint16_t) (widgets->size + size);
+
   return true;
 }
 
@@ -700,6 +742,7 @@ static inline bool winAddToggle(WinTemplate *widgets, uint8_t id,
   uint8_t flags, uint8_t anchor, GfxRect rect, bool value, const char *text
 ) {
   uint8_t fields[] = { value };
+
   return winAddRecord_(widgets, WIN_WIDGET_TOGGLE, id, flags, anchor, rect,
     fields, sizeof(fields), text);
 }
@@ -723,6 +766,7 @@ static inline bool winAddCheckBox(WinTemplate *widgets, uint8_t id,
   uint8_t flags, uint8_t anchor, GfxRect rect, bool value, const char *text
 ) {
   uint8_t fields[] = { value };
+
   return winAddRecord_(widgets, WIN_WIDGET_CHECK_BOX, id, flags, anchor, rect,
     fields, sizeof(fields), text);
 }
@@ -751,6 +795,7 @@ static inline bool winAddRadio(WinTemplate *widgets, uint8_t id,
   const char *text
 ) {
   uint8_t fields[] = { group, value };
+
   return winAddRecord_(widgets, WIN_WIDGET_RADIO, id, flags, anchor, rect,
     fields, sizeof(fields), text);
 }
@@ -802,12 +847,13 @@ static inline bool winAddList(WinTemplate *widgets, uint8_t id,
   uint8_t flags, uint8_t anchor, GfxRect rect, uint16_t selection,
   const char *items, uint16_t size
 ) {
-  uint32_t recordSize = WIN_RECORD_HEADER_SIZE + 2 * sizeof(uint16_t) + size;
+  uint32_t recordSize = WIN_RECORD_HEADER_SIZE + (2 * sizeof(uint16_t)) + size;
   if ((size > WIN_LIST_ITEMS_MAX)
-    || (widgets->size + recordSize > widgets->capacity)
+    || ((widgets->size + recordSize) > widgets->capacity)
   ) {
     return false;
   }
+
   uint8_t *record = &widgets->buffer[widgets->size];
   record[WIN_RECORD_KIND] = WIN_WIDGET_LIST;
   record[WIN_RECORD_ID] = id;
@@ -821,6 +867,7 @@ static inline bool winAddList(WinTemplate *widgets, uint8_t id,
   fields[3] = (uint8_t) (size >> 8);
   memcpy(&fields[2 * sizeof(uint16_t)], items, size);
   widgets->size = (uint16_t) (widgets->size + recordSize);
+
   return true;
 }
 
@@ -872,12 +919,14 @@ static inline bool winMenusText_(WinMenus *menus, const char *text) {
   if (length > UINT8_MAX) {
     length = UINT8_MAX;
   }
-  if (menus->size + 1 + length > menus->capacity) {
+  if ((menus->size + 1 + length) > menus->capacity) {
     return false;
   }
+
   menus->buffer[menus->size] = (uint8_t) length;
   memcpy(&menus->buffer[menus->size + 1], text, length);
   menus->size = (uint16_t) (menus->size + 1 + length);
+
   return true;
 }
 
@@ -891,12 +940,14 @@ static inline bool winMenusText_(WinMenus *menus, const char *text) {
 /// @return Returns true if it was added, false if it didn't fit.
 static inline bool winMenusAdd(WinMenus *menus, const char *title) {
   uint16_t size = menus->size;
-  if (!winMenusText_(menus, title) || (menus->size >= menus->capacity)) {
+  if ((!winMenusText_(menus, title)) || (menus->size >= menus->capacity)) {
     menus->size = size;
     return false;
   }
+
   menus->countAt = menus->size;
   menus->buffer[menus->size++] = 0;
+
   return true;
 }
 
@@ -917,17 +968,21 @@ static inline bool winMenusAddItem(WinMenus *menus, uint8_t id,
   uint8_t flags, const char *text, const char *shortcut
 ) {
   uint16_t size = menus->size;
-  if ((menus->size + 2 > menus->capacity) || (menus->size == 0)) {
+  if (((menus->size + 2) > menus->capacity) || (menus->size == 0)) {
     return false;
   }
+
   menus->buffer[menus->size] = id;
   menus->buffer[menus->size + 1] = flags;
   menus->size = (uint16_t) (menus->size + 2);
-  if (!winMenusText_(menus, text) || !winMenusText_(menus, shortcut)) {
+
+  if ((!winMenusText_(menus, text)) || (!winMenusText_(menus, shortcut))) {
     menus->size = size;
     return false;
   }
+
   menus->buffer[menus->countAt]++;
+
   return true;
 }
 
@@ -950,10 +1005,11 @@ static inline bool winAddMenuBar(WinTemplate *widgets, uint8_t id,
   uint32_t recordSize = WIN_RECORD_HEADER_SIZE + sizeof(uint16_t)
     + menus->size;
   if ((menus->size > WIN_MENU_BAR_MAX)
-    || (widgets->size + recordSize > widgets->capacity)
+    || ((widgets->size + recordSize) > widgets->capacity)
   ) {
     return false;
   }
+
   uint8_t *record = &widgets->buffer[widgets->size];
   record[WIN_RECORD_KIND] = WIN_WIDGET_MENU_BAR;
   record[WIN_RECORD_ID] = id;
@@ -966,6 +1022,7 @@ static inline bool winAddMenuBar(WinTemplate *widgets, uint8_t id,
   fields[1] = (uint8_t) (menus->size >> 8);
   memcpy(&fields[sizeof(uint16_t)], menus->buffer, menus->size);
   widgets->size = (uint16_t) (widgets->size + recordSize);
+
   return true;
 }
 
@@ -985,9 +1042,10 @@ static inline bool winAddMenuBar(WinTemplate *widgets, uint8_t id,
 static inline bool winAddCanvas(WinTemplate *widgets, uint8_t id,
   uint8_t flags, uint8_t anchor, GfxRect rect
 ) {
-  if (widgets->size + WIN_RECORD_HEADER_SIZE > widgets->capacity) {
+  if ((widgets->size + WIN_RECORD_HEADER_SIZE) > widgets->capacity) {
     return false;
   }
+
   uint8_t *record = &widgets->buffer[widgets->size];
   record[WIN_RECORD_KIND] = WIN_WIDGET_CANVAS;
   record[WIN_RECORD_ID] = id;
@@ -995,6 +1053,7 @@ static inline bool winAddCanvas(WinTemplate *widgets, uint8_t id,
   record[WIN_RECORD_ANCHOR] = anchor;
   memcpy(&record[WIN_RECORD_RECT], &rect, sizeof(rect));
   widgets->size = (uint16_t) (widgets->size + WIN_RECORD_HEADER_SIZE);
+
   return true;
 }
 
@@ -1032,21 +1091,26 @@ WIN_OUT_OF_LINE int winAddWidgets(WinSession *session, uint8_t window,
   const WinTemplate *widgets
 ) {
   MESSAGE_ARGS_ALLOCATE(WinAddWidgetsArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   args->window = window;
   args->templateSize = widgets->size;
   args->widgets = (const uint8_t*) MESSAGE_BUFFER_SHARE(widgets->buffer,
     widgets->size, MESSAGE_BUFFER_IN, session->server);
   WinError status = WIN_ERR_NO_MEMORY;
+
   if ((widgets->size == 0) || (args->widgets != NULL)) {
     status = winCall_(session, WIN_MSG_ADD_WIDGETS, args, sizeof(*args));
   }
   if (args->widgets != NULL) {
     MESSAGE_BUFFER_UNSHARE(args->widgets, widgets->buffer, MESSAGE_BUFFER_IN);
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return winErrno(status);
 }
 
@@ -1072,31 +1136,40 @@ WIN_OUT_OF_LINE int winSetWidget_(WinSession *session, uint8_t window,
   uint16_t size, const GfxRect *rect
 ) {
   MESSAGE_ARGS_ALLOCATE(WinSetWidgetArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   args->window = window;
   args->widget = widget;
   args->property = property;
   args->value = value;
   args->size = (data != NULL) ? size : 0;
   memset(&args->rect, 0, sizeof(args->rect));
+
   if (rect != NULL) {
     args->rect = *rect;
   }
+
   args->data = NULL;
+
   if (args->size > 0) {
     args->data = (const uint8_t*) MESSAGE_BUFFER_SHARE(data, args->size,
       MESSAGE_BUFFER_IN, session->server);
   }
+
   WinError status = WIN_ERR_NO_MEMORY;
+
   if ((args->size == 0) || (args->data != NULL)) {
     status = winCall_(session, WIN_MSG_SET_WIDGET, args, sizeof(*args));
   }
   if (args->data != NULL) {
     MESSAGE_BUFFER_UNSHARE(args->data, data, MESSAGE_BUFFER_IN);
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return winErrno(status);
 }
 
@@ -1118,6 +1191,7 @@ static inline int winSetText(WinSession *session, uint8_t window,
   if (length > UINT8_MAX) {
     length = UINT8_MAX;
   }
+
   return winSetWidget_(session, window, widget, WIN_PROP_TEXT, 0, text,
     (uint16_t) length, NULL);
 }
@@ -1254,9 +1328,11 @@ WIN_OUT_OF_LINE int winGetWidget_(WinSession *session, uint8_t window,
   uint16_t *value
 ) {
   MESSAGE_ARGS_ALLOCATE(WinGetWidgetArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   args->window = window;
   args->widget = widget;
   args->property = property;
@@ -1264,19 +1340,24 @@ WIN_OUT_OF_LINE int winGetWidget_(WinSession *session, uint8_t window,
   args->value = 0;
   args->length = 0;
   args->data = NULL;
+
   if (args->capacity > 0) {
     args->data = (uint8_t*) MESSAGE_BUFFER_SHARE(data, args->capacity,
       MESSAGE_BUFFER_OUT, session->server);
   }
+
   WinError status = WIN_ERR_NO_MEMORY;
+
   if ((args->capacity == 0) || (args->data != NULL)) {
     status = winCall_(session, WIN_MSG_GET_WIDGET, args, sizeof(*args));
   }
   if (args->data != NULL) {
     MESSAGE_BUFFER_UNSHARE(args->data, data, MESSAGE_BUFFER_OUT);
   }
+
   *value = (property == WIN_PROP_TEXT) ? args->length : args->value;
   MESSAGE_ARGS_FREE(args);
+
   return winErrno(status);
 }
 
@@ -1299,11 +1380,14 @@ static inline int winGetText(WinSession *session, uint8_t window,
   uint16_t length = 0;
   int rc = winGetWidget_(session, window, widget, WIN_PROP_TEXT,
     (uint8_t*) text, capacity - 1, &length);
+
   if (rc < 0) {
     text[0] = '\0';
     return rc;
   }
-  text[(length < capacity - 1) ? length : capacity - 1] = '\0';
+
+  text[(length < (capacity - 1)) ? length : (capacity - 1)] = '\0';
+
   return length;
 }
 
@@ -1323,6 +1407,7 @@ static inline int winGetValue(WinSession *session, uint8_t window,
   uint16_t value = 0;
   int rc = winGetWidget_(session, window, widget, WIN_PROP_VALUE, NULL, 0,
     &value);
+
   return (rc < 0) ? rc : value;
 }
 
@@ -1343,16 +1428,20 @@ WIN_OUT_OF_LINE int winSetWindow_(WinSession *session, uint8_t window,
   uint8_t changes, uint8_t state, GfxColor face, const char *title
 ) {
   MESSAGE_ARGS_ALLOCATE(WinSetWindowArgs, args);
+
   if (args == NULL) {
     return -ENOMEM;
   }
+
   size_t length = 0;
+
   if (title != NULL) {
     length = strlen(title);
     if (length > WIN_TITLE_MAX) {
       length = WIN_TITLE_MAX;
     }
   }
+
   memset(&args->frame, 0, sizeof(args->frame));
   args->window = window;
   args->changes = changes;
@@ -1361,17 +1450,21 @@ WIN_OUT_OF_LINE int winSetWindow_(WinSession *session, uint8_t window,
   args->titleLength = (uint8_t) length;
   args->title = NULL;
   WinError status = WIN_ERR_NO_MEMORY;
+
   if (length > 0) {
     args->title = (const char*) MESSAGE_BUFFER_SHARE(title, length,
       MESSAGE_BUFFER_IN, session->server);
   }
   if ((length == 0) || (args->title != NULL)) {
     status = winCall_(session, WIN_MSG_SET_WINDOW, args, sizeof(*args));
+
     if (length > 0) {
       MESSAGE_BUFFER_UNSHARE(args->title, title, MESSAGE_BUFFER_IN);
     }
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return winErrno(status);
 }
 
@@ -1439,6 +1532,7 @@ static inline void winDestroyWindow(WinSession *session, uint8_t window) {
   if (args == NULL) {
     return;
   }
+
   args->window = window;
   winPost_(session, WIN_MSG_DESTROY_WINDOW, args, sizeof(*args));
 }
@@ -1462,6 +1556,7 @@ static inline void winRemoveWidget(WinSession *session, uint8_t window,
   if (args == NULL) {
     return;
   }
+
   args->window = window;
   args->widget = widget;
   winPost_(session, WIN_MSG_REMOVE_WIDGET, args, sizeof(*args));
@@ -1500,13 +1595,16 @@ WIN_OUT_OF_LINE bool winHandleMessage(WinSession *session,
     const WinEventsArgs *args
       = (const WinEventsArgs*) processMessageData(message);
     uint8_t count = 0;
+
     if ((args != NULL) && session->connected) {
       count = args->count;
       if (count > WIN_EVENTS_PER_MESSAGE) {
         count = WIN_EVENTS_PER_MESSAGE;
       }
+
       memcpy(session->events, args->events, count * sizeof(WinEvent));
     }
+
     session->numEvents = count;
     session->nextEvent = 0;
     processMessageSetDone(message);
@@ -1516,6 +1614,7 @@ WIN_OUT_OF_LINE bool winHandleMessage(WinSession *session,
     session->connected = false;
     return true;
   }
+
   return false;
 }
 
@@ -1545,11 +1644,13 @@ WIN_OUT_OF_LINE int winNextEvent(WinSession *session, WinEvent *event,
       if (session->reported) {
         return -ENOTCONN;
       }
+
       session->reported = true;
       memset(event, 0, sizeof(*event));
       event->type = WIN_EVENT_DISCONNECTED;
       return 0;
     }
+
     ProcessMessage *message
       = processMessageQueueWait((struct timespec*) timeout);
     if (message == NULL) {
@@ -1558,6 +1659,7 @@ WIN_OUT_OF_LINE int winNextEvent(WinSession *session, WinEvent *event,
       }
     } else if (!winHandleMessage(session, message)) {
       processMessageSetDone(message);
+
       if (processMessageWaiting(message) == false) {
         processMessageRelease(message);
       }

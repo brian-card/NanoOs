@@ -106,6 +106,7 @@ static uint8_t vdpUploadFont(VdpOutput *vdpOutput, GfxUploadFontArgs *args) {
   ) {
     slot++;
   }
+
   if (slot >= VDP_MAX_FONTS) {
     return GFX_ERR_OUT_OF_HANDLES;
   }
@@ -114,6 +115,7 @@ static uint8_t vdpUploadFont(VdpOutput *vdpOutput, GfxUploadFontArgs *args) {
   if (status == GFX_OK) {
     args->handle = (GfxHandle) (VDP_FONT_ID_BASE + slot);
   }
+
   return status;
 }
 
@@ -130,6 +132,7 @@ static uint8_t vdpUploadFont(VdpOutput *vdpOutput, GfxUploadFontArgs *args) {
 /// uploaded.
 static uint8_t vdpSetDefaultFont(VdpOutput *vdpOutput, GfxHandle font) {
   uint8_t slot = 0;
+
   if (font != GFX_INVALID_HANDLE) {
     slot = vdpFontSlot(vdpOutput, font);
     if (slot == 0) {
@@ -138,6 +141,7 @@ static uint8_t vdpSetDefaultFont(VdpOutput *vdpOutput, GfxHandle font) {
   }
 
   vdpOutput->ownerDefaultFont = slot;
+
   return GFX_OK;
 }
 
@@ -163,6 +167,7 @@ static void vdpDestroyFont(VdpOutput *vdpOutput, GfxHandle font) {
   };
   vdpWrite(destroy, sizeof(destroy));
   vdpOutput->fontsUsed &= (uint8_t) ~(1 << slot);
+
   if (vdpOutput->ownerDefaultFont == slot) {
     vdpOutput->ownerDefaultFont = 0;
   }
@@ -226,9 +231,11 @@ static void vdpDestroyImage(VdpOutput *vdpOutput, GfxHandle image) {
   VdpDrawState *draw = vdpOutput->draw;
   uint8_t slot = vdpSlot(draw->imagesUsed, image, VDP_IMAGE_ID_BASE,
     VDP_MAX_IMAGES);
+
   if (slot < VDP_MAX_IMAGES) {
     vdpClearBuffer(image);
     draw->imagesUsed ^= (uint16_t) (1 << slot);
+
     if (draw->cursor == image) {
       draw->cursor = VDP_CURSOR_ID;
       vdpShowCursor(draw);
@@ -248,6 +255,7 @@ static void vdpDiscardPreload(VdpOutput *vdpOutput, GfxHandle preload) {
   VdpDrawState *draw = vdpOutput->draw;
   uint8_t slot = vdpSlot(draw->preloadsUsed, preload, VDP_PRELOAD_ID_BASE,
     VDP_MAX_PRELOADS);
+
   if (slot < VDP_MAX_PRELOADS) {
     vdpClearBuffer(preload);
     draw->preloadsUsed ^= (uint16_t) (1 << slot);
@@ -282,8 +290,10 @@ static uint8_t vdpSetCursor(VdpDrawState *draw, const GfxSetCursorArgs *args) {
     };
     vdpWrite(make, sizeof(make));
   }
+
   draw->cursor = cursor;
   vdpShowCursor(draw);
+
   return GFX_OK;
 }
 
@@ -319,20 +329,24 @@ static uint8_t vdpFinish(VdpOutput *vdpOutput, ProcessMessage *message) {
   if (vdpOutput->finishMessage != NULL) {
     return GFX_ERR_INVALID_STATE;
   }
+
   uint8_t cookie = (uint8_t) (vdpOutput->input->pollCookie + 1);
   if ((cookie < VDP_FINISH_POLL_COOKIE) || (cookie > VDP_LAST_POLL_COOKIE)) {
     cookie = VDP_FINISH_POLL_COOKIE;
   }
+
   const uint8_t finish[] = {
     23, 0, 0xCA,
     23, 0, 0x80, cookie
   };
+
   vdpOutput->input->pollCookie = cookie;
   vdpOutput->input->pollAnswered = false;
   vdpWrite(finish, sizeof(finish));
   vdpTimeFromNow(&vdpOutput->nextPoll, VDP_GENERAL_POLL_TIMEOUT_SECONDS, 0);
   vdpOutput->finishMessage = message;
   vdpOutput->graphicsMessage = NULL;
+
   return GFX_OK;
 }
 
@@ -351,12 +365,15 @@ static void vdpFinishDone(VdpOutput *vdpOutput, uint8_t status) {
   if (message == NULL) {
     return;
   }
+
   vdpOutput->finishMessage = NULL;
   vdpOutput->nextPoll.tv_nsec = VDP_NEVER;
+
   if (status == VDP_UNKNOWN) {
     processMessageRelease(message);
     return;
   }
+
   ((GfxFinishArgs*) processMessageData(message))->status = status;
   processMessageSetDone(message);
 }
@@ -465,6 +482,7 @@ static void (*const _vdpOwnerFrees[])(VdpOutput *vdpOutput) = {
 static void vdpReleaseEvents(VdpInput *input) {
   MESSAGE_ARGS_DESTROY(input->events);
   input->events = NULL;
+
   if (input->eventsMessage == NULL) {
     MESSAGE_ARGS_DESTROY(input->sentEvents);
     input->sentEvents = NULL;
@@ -491,11 +509,13 @@ static void vdpReleaseEvents(VdpInput *input) {
 /// @return This function returns no value.
 static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
   vdpFinishDone(vdpOutput, (revoke == true) ? GFX_ERR_NOT_OWNER : VDP_UNKNOWN);
+
   for (uint8_t ii = 0;
-    ii < sizeof(_vdpOwnerFrees) / sizeof(_vdpOwnerFrees[0]); ii++
+    ii < (sizeof(_vdpOwnerFrees) / sizeof(_vdpOwnerFrees[0])); ii++
   ) {
     _vdpOwnerFrees[ii](vdpOutput);
   }
+
   free(vdpOutput->draw);
   vdpOutput->draw = NULL;
   vdpReleaseEvents(vdpOutput->input);
@@ -516,6 +536,7 @@ static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
       processMessageInit(message,
         GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED,
         NULL, 0, /* waiting= */ false);
+
       if (sendProcessMessageToPid(vdpOutput->owner, message)
         != processSuccess
       ) {
@@ -523,6 +544,7 @@ static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
       }
     }
   }
+
   vdpOutput->owner = PROCESS_ID_NOT_SET;
   vdpOutput->ownerDescriptor = NULL;
   vdpOutput->error = GFX_OK;
@@ -551,9 +573,11 @@ static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
   } else if (vdpOutput->owner == PROCESS_ID_NOT_SET) {
     VdpInput *input = vdpOutput->input;
     VdpDrawState *draw = (VdpDrawState*) calloc(1, sizeof(VdpDrawState));
+
     vdpOutput->heldText = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
     input->events = MESSAGE_ARGS_CREATE(GfxInputEventsArgs,
       MESSAGE_ARGS_ROUND_TRIP);
+
     if (input->sentEvents == NULL) {
       input->sentEvents = MESSAGE_ARGS_CREATE(GfxInputEventsArgs,
         MESSAGE_ARGS_ROUND_TRIP);
@@ -567,6 +591,7 @@ static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
       vdpReleaseEvents(input);
       return GFX_ERR_OUT_OF_MEMORY;
     }
+
     memset(&input->eventState, 0, sizeof(input->eventState));
     vdpOutput->heldText->length = 0;
     draw->clip[0].w = VDP_SCREEN_WIDTH;
@@ -592,6 +617,7 @@ static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
   args->defaultFontH = VDP_FONT_HEIGHT;
   args->defaultFontFirst = VDP_FONT_FIRST_CHAR;
   args->defaultFontCount = VDP_FONT_NUM_CHARS;
+
   return GFX_OK;
 }
 
@@ -609,6 +635,7 @@ void* vdpRevoke(void *args) {
   if (vdpOutput->owner != PROCESS_ID_NOT_SET) {
     vdpRelease(vdpOutput, true);
   }
+
   return args;
 }
 
@@ -634,9 +661,11 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
 ) {
   void *payload = processMessageData(message);
   bool oneWay = ((VDP_ONE_WAY_MESSAGES >> type) & 1) != 0;
+
   if (oneWay == processMessageWaiting(message)) {
     return;
   }
+
   ProcessDescriptor *sender = processMessageFrom(message);
   if ((vdpOutput->owner != PROCESS_ID_NOT_SET)
     && (vdpOutput->owner != processPid(sender))
@@ -647,6 +676,7 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
   }
 
   uint8_t status = GFX_ERR_NOT_SUPPORTED;
+
   if ((processMessageSize(message) != _vdpArgsSizes[type])
     || ((_vdpArgsSizes[type] > 0) && (payload == NULL))
   ) {
@@ -745,7 +775,7 @@ void* vdpGraphics(void *args) {
     if (type < GFX_MSG_COUNT) {
       vdpHandleGraphics(vdpOutput, message, type);
     } else if ((type == GFX_MSG_CLIENT_ENDED)
-      && ((ProcessId) (uintptr_t) processMessageData(message)
+      && (((ProcessId) (uintptr_t) processMessageData(message))
         == vdpOutput->owner)
     ) {
       vdpRelease(vdpOutput, false);

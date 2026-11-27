@@ -78,6 +78,7 @@ static int receiveEventsAt(int count, long timeoutMs,
   timespec_get(&deadline, TIME_UTC);
   deadline.tv_sec += timeoutMs / 1000L;
   deadline.tv_nsec += (timeoutMs % 1000L) * 1000000L;
+
   if (deadline.tv_nsec >= 1000000000L) {
     deadline.tv_nsec -= 1000000000L;
     deadline.tv_sec++;
@@ -89,17 +90,20 @@ static int receiveEventsAt(int count, long timeoutMs,
     if (message == NULL) {
       struct timespec now;
       timespec_get(&now, TIME_UTC);
+
       if ((now.tv_sec > deadline.tv_sec) || ((now.tv_sec == deadline.tv_sec)
           && (now.tv_nsec >= deadline.tv_nsec))
       ) {
         break;
       }
+
       continue;
     }
     if (gfxIsInputEvents(message)) {
       const GfxInputEventsArgs *events = gfxInputEvents(message);
-      for (int ii = 0; ii < (int) events->count; ii++) {
+      for (int ii = 0; ii < ((int) events->count); ii++) {
         const GfxEvent *event = &events->events[ii];
+
         if (target == NULL) {
           printEvent(event);
           received++;
@@ -109,19 +113,25 @@ static int receiveEventsAt(int count, long timeoutMs,
           received++;
         }
       }
+
       gfxInputEventsDone(message);
       continue;
     }
+
     int64_t type = processMessageType(message);
+
     processMessageSetDone(message);
+
     if (processMessageWaiting(message) == false) {
       processMessageRelease(message);
     }
+
     if (type == (GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED)) {
       printf("gfxprobe: revoked\n");
       break;
     }
   }
+
   return received;
 }
 
@@ -165,10 +175,11 @@ void* gfxprobeInput(void *args) {
     timespec_get(&start, TIME_UTC);
     gfxWarpCursor(disp, target.x, target.y);
     int received = receiveEventsAt(1, 5000, &target);
+
     timespec_get(&now, TIME_UTC);
     printf("gfxprobe: lag %d %d %s %ld ms\n", (int) target.x, (int) target.y,
       (received == 1) ? "arrived" : "lost",
-      ((long) (now.tv_sec - start.tv_sec) * 1000L)
+      (((long) (now.tv_sec - start.tv_sec)) * 1000L)
       + ((now.tv_nsec - start.tv_nsec) / 1000000L));
     paintArgs->consumed = 3;
   } else if ((strcmp(step, "warp") == 0) && (numWords >= 3)) {
@@ -176,5 +187,6 @@ void* gfxprobeInput(void *args) {
       (int16_t) strtol(words[2], NULL, 0)));
     paintArgs->consumed = 3;
   }
+
   return args;
 }

@@ -61,30 +61,37 @@ static uint8_t wmSetText(WmState *state, const WmWindow *window,
     if (size > widget->maxLength) {
       size = widget->maxLength;
     }
+
     memcpy(widget->text, data, size);
     widget->textLength = (uint8_t) size;
     widget->caret = widget->textLength;
     return WIN_OK;
   }
-  int32_t change = (int32_t) size - widget->textLength;
-  if (((uint32_t) widgets->bytes + change > UINT16_MAX)
-    || !wmCharge(state, window->owner, change)
+
+  int32_t change = ((int32_t) size) - widget->textLength;
+  if (((((uint32_t) widgets->bytes) + change) > UINT16_MAX)
+    || (!wmCharge(state, window->owner, change))
   ) {
     return WIN_ERR_NO_MEMORY;
   }
+
   char *text = NULL;
+
   if (size > 0) {
     text = (char*) malloc(size);
     if (text == NULL) {
       wmCharge(state, window->owner, -change);
       return WIN_ERR_NO_MEMORY;
     }
+
     memcpy(text, data, size);
   }
+
   free(widget->text);
   widget->text = text;
   widget->textLength = (uint8_t) size;
   widgets->bytes = (uint16_t) (widgets->bytes + change);
+
   return WIN_OK;
 }
 
@@ -111,31 +118,39 @@ static uint8_t wmSetItems(WmState *state, const WmWindow *window,
   if ((size > WIN_LIST_ITEMS_MAX) || ((size > 0) && (data == NULL))) {
     return WIN_ERR_INVALID;
   }
-  int32_t change = (int32_t) size - list->itemsSize;
-  if (((uint32_t) widgets->bytes + change > UINT16_MAX)
-    || !wmCharge(state, window->owner, change)
+
+  int32_t change = ((int32_t) size) - list->itemsSize;
+  if (((((uint32_t) widgets->bytes) + change) > UINT16_MAX)
+    || (!wmCharge(state, window->owner, change))
   ) {
     return WIN_ERR_NO_MEMORY;
   }
+
   char *items = NULL;
+
   if (size > 0) {
     items = (char*) malloc(size);
     if (items == NULL) {
       wmCharge(state, window->owner, -change);
       return WIN_ERR_NO_MEMORY;
     }
+
     memcpy(items, data, size);
   }
+
   free(list->text);
   list->text = items;
   list->itemsSize = size;
   list->numItems = wmCountItems(items, size);
   widgets->bytes = (uint16_t) (widgets->bytes + change);
+
   if ((list->value != WIN_NO_ITEM) && (list->value >= list->numItems)) {
     list->value = (list->numItems > 0) ? (uint16_t) (list->numItems - 1)
       : WIN_NO_ITEM;
   }
+
   wmShowSelection(window, list);
+
   return WIN_OK;
 }
 
@@ -152,17 +167,20 @@ static uint8_t wmSetItems(WmState *state, const WmWindow *window,
 static uint8_t wmSetMenuItem(WmWidget *bar, uint16_t value) {
   uint8_t id = (uint8_t) (value >> 8);
   uint8_t bits = WIN_MENU_DISABLED | WIN_MENU_CHECKED;
+
   for (uint8_t menu = 0; (id != 0) && (menu < bar->numItems); menu++) {
     uint8_t *title = wmMenu(bar, menu);
     uint8_t count = *wmSkipText(title);
+
     for (uint8_t ii = 0; ii < count; ii++) {
       uint8_t *item = wmMenuItem(title, ii);
       if (item[0] == id) {
-        item[1] = (uint8_t) ((item[1] & ~bits) | (value & bits));
+        item[1] = (uint8_t) ((item[1] & (~bits)) | (value & bits));
         return WIN_OK;
       }
     }
   }
+
   return WIN_ERR_NOT_FOUND;
 }
 
@@ -183,17 +201,21 @@ static void wmSetWidget(WmState *state, WmWindow *window,
   WmWidgets *widgets = (WmWidgets*) window->widgets;
   WmWidget *widget = (args->widget != WIN_NONE)
     ? wmWidgetById(widgets, args->widget) : NULL;
+
   if (widget == NULL) {
     args->status = WIN_ERR_NOT_FOUND;
     return;
   }
+
   wmDamageWidget(state, window, widget);
   args->status = WIN_OK;
   bool list = (widget->kind == WIN_WIDGET_LIST);
+
   if ((args->property == WIN_PROP_MENU_ITEM)
     && (widget->kind == WIN_WIDGET_MENU_BAR)
   ) {
     args->status = wmSetMenuItem(widget, args->value);
+
     if (state->menu.open && (state->menu.window == window->id)) {
       wmDamage(state, &state->menu.rect);
     }
@@ -207,23 +229,26 @@ static void wmSetWidget(WmState *state, WmWindow *window,
       widget->value = args->value;
       wmShowSelection(window, widget);
     }
-  } else if ((args->property == WIN_PROP_TEXT) && !list
+  } else if ((args->property == WIN_PROP_TEXT) && (!list)
     && (widget->kind != WIN_WIDGET_MENU_BAR)
   ) {
     args->status = wmSetText(state, window, widgets, widget, args->data,
       args->size);
   } else if (args->property == WIN_PROP_ENABLED) {
     widget->flags &= (uint8_t) ~WIN_WIDGET_DISABLED;
+
     if (args->value == 0) {
       widget->flags |= WIN_WIDGET_DISABLED;
     }
   } else if (args->property == WIN_PROP_HIDDEN) {
     widget->flags &= (uint8_t) ~WIN_WIDGET_HIDDEN;
+
     if (args->value != 0) {
       widget->flags |= WIN_WIDGET_HIDDEN;
     }
   } else if (args->property == WIN_PROP_VALUE) {
     widget->value = args->value;
+
     if ((widget->kind == WIN_WIDGET_RADIO) && (args->value != 0)) {
       for (uint8_t ii = 0; ii < widgets->count; ii++) {
         WmWidget *other = &widgets->widget[ii];
@@ -239,6 +264,7 @@ static void wmSetWidget(WmState *state, WmWindow *window,
     if (widgets->focus < widgets->count) {
       wmDamageWidget(state, window, &widgets->widget[widgets->focus]);
     }
+
     widgets->focus = (uint8_t) (widget - widgets->widget);
   } else if (args->property == WIN_PROP_RECT) {
     GfxRect body;
@@ -246,12 +272,14 @@ static void wmSetWidget(WmState *state, WmWindow *window,
     widget->rect = args->rect;
     widget->marginRight = body.w - widget->rect.x - widget->rect.w;
     widget->marginBottom = body.h - widget->rect.y - widget->rect.h;
+
     if (list) {
       wmShowSelection(window, widget);
     }
   } else {
     args->status = WIN_ERR_NOT_SUPPORTED;
   }
+
   wmDamageWidget(state, window, widget);
 }
 
@@ -271,12 +299,15 @@ static void wmGetWidget(WmWindow *window, WinGetWidgetArgs *args) {
   } else if (args->property == WIN_PROP_TEXT) {
     const char *text = widget->text;
     uint16_t whole = widget->textLength;
+
     if (widget->kind == WIN_WIDGET_LIST) {
       whole = 0;
+
       if (widget->value != WIN_NO_ITEM) {
         text = wmItem(widget, widget->value, &whole);
       }
     }
+
     uint16_t length = whole;
     if (length > args->capacity) {
       length = args->capacity;
@@ -284,6 +315,7 @@ static void wmGetWidget(WmWindow *window, WinGetWidgetArgs *args) {
     if ((length > 0) && (args->data != NULL)) {
       memcpy(args->data, text, length);
     }
+
     args->length = whole;
     args->status = WIN_OK;
   } else if (args->property == WIN_PROP_VALUE) {
@@ -307,24 +339,28 @@ static void wmGetWidget(WmWindow *window, WinGetWidgetArgs *args) {
 static void wmRemoveWidget(WmState *state, WmWindow *window, uint8_t id) {
   WmWidgets *widgets = (WmWidgets*) window->widgets;
   WmWidget *widget = (id != WIN_NONE) ? wmWidgetById(widgets, id) : NULL;
+
   if (widget == NULL) {
     return;
   }
+
   wmDamageWidget(state, window, widget);
   uint8_t index = (uint8_t) (widget - widgets->widget);
+
   if (widget->kind == WIN_WIDGET_CANVAS) {
     WmCanvasJob discard = { state, widgets, index, (uint8_t) (index + 1) };
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Canvas", "wmCanvasDiscard",
       &discard);
   }
+
   wmCharge(state, window->owner, -(int32_t) wmTextStorage(widget));
   widgets->bytes = (uint16_t) (widgets->bytes - wmTextStorage(widget));
   free(widget->text);
   memmove(widget, widget + 1,
-    (size_t) (widgets->count - index - 1) * sizeof(WmWidget));
+    ((size_t) (widgets->count - index - 1)) * sizeof(WmWidget));
   widgets->count--;
   uint8_t *indexes[] = { &widgets->focus, &widgets->pressed };
-  for (uint8_t ii = 0; ii < sizeof(indexes) / sizeof(indexes[0]); ii++) {
+  for (uint8_t ii = 0; ii < (sizeof(indexes) / sizeof(indexes[0])); ii++) {
     if (*indexes[ii] == index) {
       *indexes[ii] = WM_NO_WIDGET;
     } else if ((*indexes[ii] != WM_NO_WIDGET) && (*indexes[ii] > index)) {
@@ -353,6 +389,7 @@ void* wmPropertyRequest(void *args) {
   } else {
     wmGetWidget(job->window, (WinGetWidgetArgs*) job->data);
   }
+
   return args;
 }
 
@@ -371,31 +408,38 @@ static int16_t wmCountMenus(const uint8_t *menus, uint16_t size) {
   memset(seen, 0, sizeof(seen));
   const uint8_t *end = menus + size;
   int16_t count = 0;
+
   for (const uint8_t *at = menus; at < end; count++) {
     at = wmSkipText(at);
     if ((count == WIN_MAX_MENUS) || (at >= end) || (*at > WIN_MAX_MENU_ITEMS)) {
       return -1;
     }
+
     uint8_t numItems = *at++;
     for (uint8_t ii = 0; ii < numItems; ii++) {
-      if (end - at < 4) {
+      if ((end - at) < 4) {
         return -1;
       }
+
       uint8_t id = at[0];
       uint8_t bit = (uint8_t) (1 << (id & 7));
+
       if ((id != 0) && ((seen[id >> 3] & bit) != 0)) {
         return -1;
       }
+
       seen[id >> 3] |= bit;
       at = wmSkipText(at + 2);
       if ((at >= end) || ((at = wmSkipText(at)) > end)) {
         return -1;
       }
     }
+
     if (at > end) {
       return -1;
     }
   }
+
   return count;
 }
 
@@ -410,5 +454,6 @@ static int16_t wmCountMenus(const uint8_t *menus, uint16_t size) {
 void* wmPropertyMenus(void *args) {
   WmMenusCheck *check = (WmMenusCheck*) args;
   check->count = wmCountMenus(check->menus, check->size);
+
   return args;
 }

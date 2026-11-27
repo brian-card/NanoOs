@@ -117,10 +117,12 @@ static void wmText(GfxCmdBuf *cmd, GfxColor color, int16_t left,
   if (length == 0) {
     return;
   }
+
   gfxCmdSetFgColor(cmd, color);
   uint8_t *record = gfxCmdBufReserve_(cmd, GFX_CMD_DRAW_TEXT_SIZE(length));
   if (record != NULL) {
     GfxPoint at = { left, top };
+
     record[GFX_CMD_TAG] = GFX_CMD_DRAW_TEXT;
     memcpy(&record[GFX_CMD_DRAW_TEXT_AT], &at, sizeof(at));
     record[GFX_CMD_DRAW_TEXT_LENGTH] = length;
@@ -139,6 +141,7 @@ static GfxColor wmInk(const WmWidget *widget) {
   if ((widget->flags & WIN_WIDGET_DISABLED) != 0) {
     return WM_DARK;
   }
+
   return WM_TEXT;
 }
 
@@ -159,6 +162,7 @@ static void wmOutline(GfxCmdBuf *cmd, GfxColor color, int16_t left,
   int16_t top, int16_t width, int16_t height
 ) {
   GfxRect rect = { left, top, width, height };
+
   gfxCmdSetFgColor(cmd, color);
   gfxCmdDrawRect(cmd, &rect, false);
 }
@@ -180,6 +184,7 @@ static void wmLine(GfxCmdBuf *cmd, int16_t fromX, int16_t fromY,
 ) {
   GfxPoint from = { fromX, fromY };
   GfxPoint to = { toX, toY };
+
   gfxCmdDrawLine(cmd, from, to);
 }
 
@@ -200,12 +205,14 @@ static void wmPaintLabel(WmState *state, const WmWidget *widget,
   int16_t width
     = (int16_t) (widget->textLength * state->display.builtInFont.glyphW);
   int16_t left = rect->x;
+
   if (widget->align == WIN_ALIGN_CENTER) {
     left += (rect->w - width) / 2;
   } else if (widget->align == WIN_ALIGN_RIGHT) {
     left += rect->w - width;
   }
-  int16_t top = rect->y + (rect->h - state->display.builtInFont.glyphH) / 2;
+
+  int16_t top = rect->y + ((rect->h - state->display.builtInFont.glyphH) / 2);
   wmText(state->cmd, wmInk(widget), left, top, widget->text,
     widget->textLength);
 }
@@ -231,6 +238,7 @@ static void wmPaintButton(WmState *state, const WmWidget *widget,
   GfxCmdBuf *cmd = state->cmd;
   GfxColor face = WM_LIGHT;
   GfxColor ink = wmInk(widget);
+
   if (pressed) {
     face = WM_DARK;
     ink = WM_ON_ACCENT;
@@ -238,24 +246,28 @@ static void wmPaintButton(WmState *state, const WmWidget *widget,
     face = WM_ACCENT;
     ink = WM_ON_ACCENT;
   }
+
   wmFill(cmd, face, rect);
+
   if ((widget->flags & WIN_WIDGET_DEFAULT) != 0) {
     for (int16_t ii = 0; ii < WM_DEFAULT_BORDER; ii++) {
       wmOutline(cmd, WM_ACCENT, rect->x + ii, rect->y + ii,
-        rect->w - 2 * ii, rect->h - 2 * ii);
+        rect->w - (2 * ii), rect->h - (2 * ii));
     }
   } else {
     wmOutline(cmd, WM_DARK, rect->x, rect->y, rect->w, rect->h);
   }
+
   int16_t width
     = (int16_t) (widget->textLength * state->display.builtInFont.glyphW);
-  wmText(cmd, ink, rect->x + (rect->w - width) / 2,
-    rect->y + (rect->h - state->display.builtInFont.glyphH) / 2,
+  wmText(cmd, ink, rect->x + ((rect->w - width) / 2),
+    rect->y + ((rect->h - state->display.builtInFont.glyphH) / 2),
     widget->text, widget->textLength);
+
   if (focused) {
     wmOutline(cmd, WM_ACCENT, rect->x + WM_FOCUS_INSET,
-      rect->y + WM_FOCUS_INSET, rect->w - 2 * WM_FOCUS_INSET,
-      rect->h - 2 * WM_FOCUS_INSET);
+      rect->y + WM_FOCUS_INSET, rect->w - (2 * WM_FOCUS_INSET),
+      rect->h - (2 * WM_FOCUS_INSET));
   }
 }
 
@@ -279,26 +291,31 @@ static void wmPaintBox(WmState *state, const WmWidget *widget,
 ) {
   GfxCmdBuf *cmd = state->cmd;
   GfxColor ink = wmInk(widget);
-  GfxRect box = { rect->x, rect->y + (rect->h - WM_BOX_SIZE) / 2,
+  GfxRect box = { rect->x, rect->y + ((rect->h - WM_BOX_SIZE) / 2),
     WM_BOX_SIZE, WM_BOX_SIZE };
+
   wmFill(cmd, pressed ? WM_LIGHT : WM_FACE, &box);
   wmOutline(cmd, WM_DARK, box.x, box.y, box.w, box.h);
+
   if ((widget->value != 0) && (widget->kind == WIN_WIDGET_CHECK_BOX)) {
     gfxCmdSetFgColor(cmd, ink);
     wmLine(cmd, box.x + 2, box.y + 4, box.x + 4, box.y + 6);
     wmLine(cmd, box.x + 4, box.y + 6, box.x + 6, box.y + 2);
   } else if (widget->value != 0) {
     GfxRect square = { box.x + WM_RADIO_INSET, box.y + WM_RADIO_INSET,
-      WM_BOX_SIZE - 2 * WM_RADIO_INSET, WM_BOX_SIZE - 2 * WM_RADIO_INSET };
+      WM_BOX_SIZE - (2 * WM_RADIO_INSET), WM_BOX_SIZE - (2 * WM_RADIO_INSET) };
     wmFill(cmd, ink, &square);
   }
+
   uint8_t glyphH = state->display.builtInFont.glyphH;
   int16_t left = rect->x + WM_BOX_SIZE + WM_BOX_GAP;
-  int16_t top = rect->y + (rect->h - glyphH) / 2;
+  int16_t top = rect->y + ((rect->h - glyphH) / 2);
+
   wmText(cmd, ink, left, top, widget->text, widget->textLength);
+
   if (focused) {
     wmOutline(cmd, WM_ACCENT, left - 1, top - 1,
-      (int16_t) (widget->textLength * state->display.builtInFont.glyphW + 2),
+      (int16_t) ((widget->textLength * state->display.builtInFont.glyphW) + 2),
       glyphH + 2);
   }
 }
@@ -322,24 +339,28 @@ static void wmPaintField(WmState *state, const WmWindow *window,
 ) {
   GfxCmdBuf *cmd = state->cmd;
   uint8_t glyphW = state->display.builtInFont.glyphW;
+
   wmFill(cmd, WM_FACE, rect);
   wmOutline(cmd, focused ? WM_ACCENT : WM_DARK, rect->x, rect->y, rect->w,
     rect->h);
   uint8_t scroll = wmFieldScroll(state, window, widget);
   int16_t left = rect->x + WM_FIELD_INSET;
-  int16_t top = rect->y + (rect->h - state->display.builtInFont.glyphH) / 2;
-  int16_t shown = (rect->w - 2 * WM_FIELD_INSET) / glyphW;
+  int16_t top = rect->y + ((rect->h - state->display.builtInFont.glyphH) / 2);
+  int16_t shown = (rect->w - (2 * WM_FIELD_INSET)) / glyphW;
   uint8_t end = widget->textLength;
-  if (end - scroll > shown) {
+
+  if ((end - scroll) > shown) {
     end = (uint8_t) (scroll + shown);
   }
+
   if ((widget->flags & WIN_WIDGET_PASSWORD) != 0) {
     for (uint8_t at = scroll; at < end; ) {
       uint8_t run = end - at;
-      if (run > sizeof(_wmStars) - 1) {
+      if (run > (sizeof(_wmStars) - 1)) {
         run = sizeof(_wmStars) - 1;
       }
-      wmText(cmd, wmInk(widget), left + (at - scroll) * glyphW, top,
+
+      wmText(cmd, wmInk(widget), left + ((at - scroll) * glyphW), top,
         _wmStars, run);
       at += run;
     }
@@ -347,9 +368,10 @@ static void wmPaintField(WmState *state, const WmWindow *window,
     wmText(cmd, wmInk(widget), left, top, &widget->text[scroll],
       end - scroll);
   }
+
   if (focused) {
-    GfxRect caret = { left + (widget->caret - scroll) * glyphW - 1,
-      rect->y + (rect->h - WM_CARET_HEIGHT) / 2, 1, WM_CARET_HEIGHT };
+    GfxRect caret = { left + ((widget->caret - scroll) * glyphW) - 1,
+      rect->y + ((rect->h - WM_CARET_HEIGHT) / 2), 1, WM_CARET_HEIGHT };
     wmFill(cmd, WM_TEXT, &caret);
   }
 }
@@ -372,16 +394,20 @@ static void wmPaintGroup(WmState *state, const WmWindow *window,
   GfxCmdBuf *cmd = state->cmd;
   int16_t half = state->display.builtInFont.glyphH / 2;
   GfxRect box = { rect->x, rect->y + half, rect->w, rect->h - half };
+
   gfxCmdSetFgColor(cmd, WM_DARK);
   gfxCmdDrawRect(cmd, &box, false);
+
   if (widget->textLength == 0) {
     return;
   }
+
   int16_t left = rect->x + WM_GROUP_CAPTION_INSET;
   GfxRect gap = { left - WM_GROUP_CAPTION_GAP, rect->y,
-    (int16_t) (widget->textLength * state->display.builtInFont.glyphW
-      + 2 * WM_GROUP_CAPTION_GAP),
+    (int16_t) ((widget->textLength * state->display.builtInFont.glyphW)
+      + (2 * WM_GROUP_CAPTION_GAP)),
     state->display.builtInFont.glyphH };
+
   wmFill(cmd, window->face, &gap);
   wmText(cmd, wmInk(widget), left, rect->y, widget->text,
     widget->textLength);
@@ -406,14 +432,18 @@ static void wmPaintCanvas(WmState *state, const WmWidget *widget,
   if ((canvas == NULL) || (canvas->count == 0)) {
     return;
   }
+
   GfxCmdBuf *cmd = state->cmd;
   GfxPoint origin = { rect->x, rect->y };
   GfxPoint home = { 0, 0 };
+
   gfxCmdPushScissor(cmd, overlap);
   gfxCmdSetOrigin(cmd, origin);
+
   for (uint8_t ii = 0; ii < canvas->count; ii++) {
     gfxCmdCall(cmd, canvas->preloads[ii]);
   }
+
   gfxCmdSetOrigin(cmd, home);
   gfxCmdPopScissor(cmd);
 }
@@ -437,12 +467,13 @@ static bool wmSpills(const WmState *state, const WmWidget *widget,
   int16_t width
     = (int16_t) (widget->textLength * state->display.builtInFont.glyphW);
   int16_t height = glyphH;
+
   if ((widget->kind == WIN_WIDGET_TEXT_FIELD)
     || (widget->kind == WIN_WIDGET_CANVAS)
   ) {
     return false;
   } else if (widget->kind == WIN_WIDGET_LIST) {
-    return rect->h < WM_LIST_ITEM_HEIGHT + 2;
+    return rect->h < (WM_LIST_ITEM_HEIGHT + 2);
   } else if ((widget->kind == WIN_WIDGET_BUTTON)
     || (widget->kind == WIN_WIDGET_TOGGLE)
   ) {
@@ -451,12 +482,14 @@ static bool wmSpills(const WmState *state, const WmWidget *widget,
     || (widget->kind == WIN_WIDGET_RADIO)
   ) {
     width += WM_BOX_SIZE + WM_BOX_GAP;
+
     if (height < WM_BOX_SIZE) {
       height = WM_BOX_SIZE;
     }
   } else if (widget->kind == WIN_WIDGET_GROUP) {
     width += WM_GROUP_CAPTION_INSET + WM_GROUP_CAPTION_GAP;
   }
+
   return (width > rect->w) || (height > rect->h);
 }
 
@@ -478,20 +511,25 @@ void* wmWidgetsPaint(void *args) {
   const WmWindow *window = job->window;
   const WmWidgets *widgets = (const WmWidgets*) window->widgets;
   bool active = (state->active == window->id);
+
   for (uint8_t ii = 0; (widgets != NULL) && (ii < widgets->count); ii++) {
     const WmWidget *widget = &widgets->widget[ii];
     GfxRect rect;
     GfxRect overlap;
+
     wmWidgetRect(window, widget, &rect);
+
     if (((widget->flags & WIN_WIDGET_HIDDEN) != 0)
-      || !wmIntersect(&rect, job->clip, &overlap)
+      || (!wmIntersect(&rect, job->clip, &overlap))
     ) {
       continue;
     }
+
     bool spills = wmSpills(state, widget, &rect);
     if (spills) {
       gfxCmdPushScissor(state->cmd, &overlap);
     }
+
     if (widget->kind == WIN_WIDGET_CANVAS) {
       wmPaintCanvas(state, widget, &rect, &overlap);
     } else if (widget->kind == WIN_WIDGET_LABEL) {
@@ -502,6 +540,7 @@ void* wmWidgetsPaint(void *args) {
       bool pressed = (widgets->pressed == ii) && widgets->pressInside;
       bool focused = active && (widgets->focus == ii)
         && ((widget->flags & WIN_WIDGET_DISABLED) == 0);
+
       if ((widget->kind == WIN_WIDGET_BUTTON)
         || (widget->kind == WIN_WIDGET_TOGGLE)
       ) {
@@ -514,6 +553,7 @@ void* wmWidgetsPaint(void *args) {
         WmWidgetJob pass = { state, (WmWindow*) window, (WmWidget*) widget,
           rect, NULL, focused, false };
         bool list = (widget->kind == WIN_WIDGET_LIST);
+
         callOverlayFunction(OVERLAY_SAME_NAMESPACE,
           list ? "Lists" : "MenuPaint",
           list ? "wmListsPaint" : "wmMenusPaintBar", &pass);
@@ -521,9 +561,11 @@ void* wmWidgetsPaint(void *args) {
         wmPaintBox(state, widget, &rect, pressed, focused);
       }
     }
+
     if (spills) {
       gfxCmdPopScissor(state->cmd);
     }
   }
+
   return args;
 }

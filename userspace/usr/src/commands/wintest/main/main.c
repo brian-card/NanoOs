@@ -48,28 +48,34 @@
 /// @return Returns the arguments, which the caller frees, or NULL on failure.
 static char** splitWords(char **text, int *argc) {
   int count = WINTEST_SCRIPT_START;
+
   for (const char *word = *text;
     *(word += strspn(word, " \t\r\n")) != '\0';
     word += strcspn(word, " \t\r\n")
   ) {
     count++;
   }
-  char **argv = (char**) malloc(sizeof(char*) * (size_t) count);
+
+  char **argv = (char**) malloc(sizeof(char*) * ((size_t) count));
   if (argv == NULL) {
     free(*text);
     *text = NULL;
     return NULL;
   }
+
   count = WINTEST_SCRIPT_START;
   char *word = *text;
   while (*(word += strspn(word, " \t\r\n")) != '\0') {
     argv[count++] = word;
     word += strcspn(word, " \t\r\n");
+
     if (*word != '\0') {
       *word++ = '\0';
     }
   }
+
   *argc = count;
+
   return argv;
 }
 
@@ -89,20 +95,24 @@ static char** readCommands(const char *path, char **text, int *argc) {
   if (file == NULL) {
     return NULL;
   }
+
   fseek(file, 0, SEEK_END);
   long length = ftell(file);
+
   fseek(file, 0, SEEK_SET);
-  *text = (char*) malloc((size_t) length + 1);
+  *text = (char*) malloc(((size_t) length) + 1);
   if ((*text == NULL)
-    || (fread(*text, 1, (size_t) length, file) != (size_t) length)
+    || (fread(*text, 1, (size_t) length, file) != ((size_t) length))
   ) {
     fclose(file);
     free(*text);
     *text = NULL;
     return NULL;
   }
+
   fclose(file);
   (*text)[length] = '\0';
+
   return splitWords(text, argc);
 }
 
@@ -119,19 +129,23 @@ static const char* roleName(uint8_t role) {
   } else if (role == WIN_ROLE_TASKBAR) {
     return "taskbar";
   }
+
   return "none";
 }
 
 int main(int argc, char **argv) {
   Wintest *wintest = NULL;
+
   if ((argc > 1) && isHelpOption(argv[1])) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Usage", "wintestUsage",
       stdout);
     return 0;
   }
+
   bool demo = (argc == 2) && (strcmp(argv[1], "demo") == 0);
   bool script = demo || ((argc > 1) && (strcmp(argv[1], "run") == 0));
-  if (!script && ((argc != 2)
+
+  if ((!script) && ((argc != 2)
     || ((strcmp(argv[1], "hello") != 0) && (strcmp(argv[1], "wait") != 0)
       && (strcmp(argv[1], "hold") != 0)))
   ) {
@@ -145,8 +159,10 @@ int main(int argc, char **argv) {
     fputs("wintest: out of memory\n", stderr);
     return 1;
   }
+
   WinSession *session = &wintest->session;
   WinError status = winConnect(session);
+
   if (status == WIN_ERR_NOT_FOUND) {
     fputs("wintest: no window server\n", stderr);
     free(wintest);
@@ -159,8 +175,10 @@ int main(int argc, char **argv) {
   if (script) {
     char *text = NULL;
     char **words = NULL;
+
     wintest->argc = argc;
     wintest->argv = argv;
+
     if (demo) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Demo", "wintestDemo",
         &text);
@@ -170,6 +188,7 @@ int main(int argc, char **argv) {
         free(wintest);
         return 1;
       }
+
       words[0] = argv[0];
       words[1] = argv[1];
       wintest->argv = words;
@@ -181,13 +200,16 @@ int main(int argc, char **argv) {
         free(wintest);
         return 1;
       }
+
       words[0] = argv[0];
       words[1] = argv[1];
       wintest->argv = words;
     }
+
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Script", "wintestRun",
       wintest);
     int exitStatus = wintest->rc;
+
     free(words);
     free(text);
     free(wintest);
@@ -196,6 +218,7 @@ int main(int argc, char **argv) {
 
   bool quiet = (strcmp(argv[1], "hold") == 0);
   const WinHelloArgs *hello = &session->hello;
+
   if (!quiet) {
     printf("wintest: screen %ux%u work %d,%d,%d,%d cell %ux%u role %s\n",
       (unsigned int) hello->screenWidth, (unsigned int) hello->screenHeight,
@@ -203,6 +226,7 @@ int main(int argc, char **argv) {
       hello->workArea.h, (unsigned int) hello->cellWidth,
       (unsigned int) hello->cellHeight, roleName(hello->role));
   }
+
   if (strcmp(argv[1], "hello") == 0) {
     winDisconnect(session);
     free(wintest);
@@ -215,9 +239,12 @@ int main(int argc, char **argv) {
       if (!quiet) {
         puts("wintest: disconnected");
       }
+
       break;
     }
   }
+
   free(wintest);
+
   return 0;
 }

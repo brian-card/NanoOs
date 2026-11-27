@@ -87,11 +87,13 @@
 /// @return Returns the number of bytes.
 WM_SHARED uint8_t wmShown(const uint8_t *title) {
   uint8_t shown = *title;
+
   for (uint8_t ii = 1; ii <= *title; ii++) {
     if (title[ii] == WM_MARK) {
       shown--;
     }
   }
+
   return shown;
 }
 
@@ -111,14 +113,18 @@ WM_SHARED void wmTitleRect(WmState *state, const WmWidget *bar,
   const GfxRect *barRect, uint8_t index, GfxRect *rect
 ) {
   uint8_t glyphW = state->display.builtInFont.glyphW;
+
   *rect = *barRect;
   rect->x += WM_MENU_INSET;
   const uint8_t *title = wmMenu(bar, 0);
+
   for (uint8_t ii = 0; ; ii++) {
-    rect->w = (int16_t) (wmShown(title) * glyphW + 2 * WM_TITLE_PAD);
+    rect->w = (int16_t) ((wmShown(title) * glyphW) + (2 * WM_TITLE_PAD));
+
     if (ii == index) {
       return;
     }
+
     rect->x += rect->w;
     title = wmMenuItem((uint8_t*) title, *wmSkipText(title));
   }
@@ -135,6 +141,7 @@ WM_SHARED int16_t wmItemHeight(const uint8_t *item) {
   if ((item[1] & WIN_MENU_SEPARATOR) != 0) {
     return WM_SEPARATOR_HEIGHT;
   }
+
   return WM_ITEM_HEIGHT;
 }
 

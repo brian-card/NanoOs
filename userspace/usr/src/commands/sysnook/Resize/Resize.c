@@ -56,6 +56,7 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
   wmGridPlace(state, window, &place);
   uint8_t columns = (uint8_t) place.w;
   uint8_t rows = (uint8_t) place.h;
+
   wmGridCursor(grid);
   int32_t change = wmGridBytes(columns, rows)
     - wmGridBytes(grid->columns, grid->rows);
@@ -63,33 +64,40 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
     && wmCharge(state, window->owner, change)
   ) {
     uint8_t *cells
-      = (uint8_t*) malloc((size_t) columns * rows * WM_GRID_PLANES);
+      = (uint8_t*) malloc(((size_t) columns) * rows * WM_GRID_PLANES);
     if (cells == NULL) {
       wmCharge(state, window->owner, -change);
     } else {
-      size_t plane = (size_t) columns * rows;
-      size_t oldPlane = (size_t) grid->columns * grid->rows;
+      size_t plane = ((size_t) columns) * rows;
+      size_t oldPlane = ((size_t) grid->columns) * grid->rows;
+
       memset(cells, ' ', plane);
       memset(&cells[plane], WM_BLANK_ATTRIBUTE, plane);
       uint8_t keepColumns = (columns < grid->columns) ? columns
         : grid->columns;
+
       for (uint8_t row = 0; (row < rows) && (row < grid->rows); row++) {
-        size_t to = (size_t) row * columns;
-        size_t from = (size_t) row * grid->columns;
+        size_t to = ((size_t) row) * columns;
+        size_t from = ((size_t) row) * grid->columns;
+
         memcpy(&cells[to], &grid->cells[from], keepColumns);
         memcpy(&cells[plane + to], &grid->cells[oldPlane + from],
           keepColumns);
       }
+
       free(grid->cells);
       grid->cells = cells;
       grid->columns = columns;
       grid->rows = rows;
+
       if (grid->cursorRow >= rows) {
         grid->cursorRow = rows - 1;
       }
+
       if (grid->cursorColumn >= columns) {
         grid->cursorColumn = columns - 1;
       }
+
       if (grid->port != WM_NO_PORT) {
         grid->winsizeWanted = true;
         grid->reportWanted = grid->reports;
@@ -97,6 +105,7 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
       }
     }
   }
+
   wmGridMargins(state, window, grid);
   wmGridCursor(grid);
   grid->scroll = 0;
@@ -128,6 +137,7 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
 void* wmResizeGrid(void *args) {
   WmTemplateJob *job = (WmTemplateJob*) args;
   wmGridFollow(job->state, job->window);
+
   return args;
 }
 
@@ -146,10 +156,13 @@ static void wmFreeGrid(WmState *state, ProcessId owner, WmGrid *grid) {
   if (grid == NULL) {
     return;
   }
+
   wmCharge(state, owner, -wmGridBytes(grid->columns, grid->rows));
+
   if (grid->port != WM_NO_PORT) {
     windowServerCloseSession(grid->port);
   }
+
   wmGridUnbind(grid);
   free(grid->cells);
   free(grid);
@@ -173,8 +186,10 @@ static uint8_t wmOpenSession(WmGrid *grid, ProcessId display) {
   if ((grid->inputArgs == NULL) || (grid->winsizeArgs == NULL)) {
     return WIN_ERR_NO_MEMORY;
   }
+
   uint8_t port = WM_NO_PORT;
   uint8_t shell = 0;
+
   if (windowServerOpenSession(grid->rows, grid->columns, display, &port,
       &shell) != 0
   ) {
@@ -183,10 +198,13 @@ static uint8_t wmOpenSession(WmGrid *grid, ProcessId display) {
     } else if (errno == EINVAL) {
       return WIN_ERR_INVALID;
     }
+
     return WIN_ERR_NO_MEMORY;
   }
+
   grid->port = port;
   grid->shell = shell;
+
   return WIN_OK;
 }
 
@@ -212,10 +230,12 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
   ) {
     return WIN_ERR_NOT_SUPPORTED;
   }
+
   WmGrid *grid = (WmGrid*) calloc(1, sizeof(WmGrid));
   if (grid == NULL) {
     return WIN_ERR_NO_MEMORY;
   }
+
   window->content = grid;
   window->face = WM_GRID_FACE;
   grid->widget = widgets[WIN_RECORD_ID];
@@ -234,6 +254,7 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
   grid->columns = (uint8_t) place.w;
   grid->rows = (uint8_t) place.h;
   wmGridMargins(state, window, grid);
+
   if (!wmCharge(state, window->owner,
       wmGridBytes(grid->columns, grid->rows))
   ) {
@@ -241,9 +262,11 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
     window->content = NULL;
     return WIN_ERR_NO_MEMORY;
   }
-  size_t plane = (size_t) grid->columns * grid->rows;
+
+  size_t plane = ((size_t) grid->columns) * grid->rows;
   grid->cells = (uint8_t*) malloc(plane * WM_GRID_PLANES);
   uint8_t status = WIN_ERR_NO_MEMORY;
+
   if (grid->cells != NULL) {
     memset(grid->cells, ' ', plane);
     memset(&grid->cells[plane], WM_BLANK_ATTRIBUTE, plane);
@@ -251,14 +274,17 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
       = WIN_ATTRIBUTE(WIN_ANSI_BLACK, WIN_ANSI_BRIGHT_WHITE);
     grid->cursorShown = true;
     status = WIN_OK;
+
     if ((grid->flags & WIN_WIDGET_SESSION) != 0) {
       status = wmOpenSession(grid, window->owner);
     }
   }
+
   if (status != WIN_OK) {
     wmFreeGrid(state, window->owner, grid);
     window->content = NULL;
   }
+
   return status;
 }
 
@@ -273,6 +299,7 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
 void* wmResizeMakeGrid(void *args) {
   WmTemplateJob *job = (WmTemplateJob*) args;
   job->status = wmMakeGrid(job->state, job->window, job->widgets, job->size);
+
   return args;
 }
 
@@ -288,5 +315,6 @@ void* wmResizeFreeGrid(void *args) {
   wmFreeGrid(job->state, job->window->owner,
     (WmGrid*) job->window->content);
   job->window->content = NULL;
+
   return args;
 }

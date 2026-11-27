@@ -47,6 +47,7 @@ static void wmDamageFocused(WmState *state, uint8_t id) {
   WmWindow *window = wmFind(state, id);
   WmWidgets *widgets = (window != NULL) ? (WmWidgets*) window->widgets
     : NULL;
+
   if ((widgets != NULL) && (widgets->focus < widgets->count)) {
     wmDamageWidget(state, window, &widgets->widget[widgets->focus]);
   }
@@ -76,9 +77,11 @@ static uint8_t subtract(GfxRect *pieces, uint8_t count, const GfxRect *cover) {
   for (uint8_t ii = 0; ii < kept; ii++) {
     GfxRect piece = pieces[ii];
     GfxRect overlap;
-    if ((piece.w == 0) || !wmIntersect(&piece, cover, &overlap)) {
+
+    if ((piece.w == 0) || (!wmIntersect(&piece, cover, &overlap))) {
       continue;
     }
+
     int16_t pieceBottom = piece.y + piece.h;
     int16_t overlapBottom = overlap.y + overlap.h;
     GfxRect bands[4] = {
@@ -88,16 +91,20 @@ static uint8_t subtract(GfxRect *pieces, uint8_t count, const GfxRect *cover) {
       { overlap.x + overlap.w, overlap.y,
         piece.x + piece.w - overlap.x - overlap.w, overlap.h },
     };
+
     pieces[ii].w = 0;
+
     for (uint8_t jj = 0; jj < 4; jj++) {
       if ((bands[jj].w <= 0) || (bands[jj].h <= 0)) {
         continue;
       } else if (count == WM_MAX_PIECES) {
         return WM_MAX_PIECES + 1;
       }
+
       pieces[count++] = bands[jj];
     }
   }
+
   return count;
 }
 
@@ -117,16 +124,19 @@ void* wmOcclude(void *args) {
   GfxRect damage[WM_MAX_DAMAGE];
   uint8_t owners[WM_MAX_DAMAGE];
   uint8_t count = 0;
+
   for (uint8_t ii = 0; ii < state->numDamage; ii++) {
     const GfxRect *rect = &state->damage[ii];
     WmWindow *window = wmFind(state, state->damageOwner[ii]);
     GfxRect pieces[WM_MAX_PIECES];
     uint8_t numPieces = 1;
+
     if ((window == NULL) || (window->state == WIN_STATE_MINIMIZED)) {
       numPieces = WM_MAX_PIECES + 1;
     } else if (!wmIntersect(rect, &window->frame, &pieces[0])) {
       continue;
     }
+
     for (WmWindow *above = window + 1; (numPieces <= WM_MAX_PIECES)
       && (above < &state->windows[state->numWindows]); above++
     ) {
@@ -134,23 +144,28 @@ void* wmOcclude(void *args) {
         numPieces = subtract(pieces, numPieces, &above->frame);
       }
     }
+
     if ((numPieces <= WM_MAX_PIECES) && state->menu.open) {
       numPieces = subtract(pieces, numPieces, &state->menu.rect);
     }
+
     uint8_t kept = 0;
+
     for (uint8_t jj = 0;
       (numPieces <= WM_MAX_PIECES) && (jj < numPieces);
       jj++
     ) {
       kept += (pieces[jj].w > 0) ? 1 : 0;
     }
+
     if ((numPieces > WM_MAX_PIECES)
-      || (count + kept + (state->numDamage - ii - 1) > WM_MAX_DAMAGE)
+      || ((count + kept + (state->numDamage - ii - 1)) > WM_MAX_DAMAGE)
     ) {
       damage[count] = *rect;
       owners[count++] = 0;
       continue;
     }
+
     for (uint8_t jj = 0; jj < numPieces; jj++) {
       if (pieces[jj].w > 0) {
         damage[count] = pieces[jj];
@@ -158,9 +173,11 @@ void* wmOcclude(void *args) {
       }
     }
   }
+
   memcpy(state->damage, damage, count * sizeof(GfxRect));
   memcpy(state->damageOwner, owners, count);
   state->numDamage = count;
+
   return args;
 }
 
@@ -176,12 +193,14 @@ void* wmOcclude(void *args) {
 void* wmRestack(void *args) {
   WmState *state = (WmState*) args;
   WmWindow *raised = wmFind(state, state->raised);
+
   if (raised != NULL) {
     for (uint8_t ii = state->raisedFrom;
       &state->windows[ii] < raised; ii++
     ) {
       const WmWindow *above = &state->windows[ii];
       GfxRect covered;
+
       if ((above->state != WIN_STATE_MINIMIZED)
         && wmIntersect(&raised->frame, &above->frame, &covered)
       ) {
@@ -189,10 +208,13 @@ void* wmRestack(void *args) {
       }
     }
   }
+
   state->raised = 0;
+
   for (uint8_t ii = 0; ii < 2; ii++) {
     wmDamageFocused(state, state->refocus[ii]);
     state->refocus[ii] = 0;
   }
+
   return args;
 }

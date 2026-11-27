@@ -92,6 +92,7 @@ static volatile int execStatus;
 /// @return This function never returns.
 static void* fakeDriver(void *args) {
   (void) args;
+
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
     if (processMessage == NULL) {
@@ -104,13 +105,17 @@ static void* fakeDriver(void *args) {
         endedPids[endedCount]
           = (ProcessId) (uintptr_t) processMessageData(processMessage);
       }
+
       endedCount++;
     }
+
     processMessageSetDone(processMessage);
+
     if (processMessageWaiting(processMessage) == false) {
       processMessageRelease(processMessage);
     }
   }
+
   return NULL;
 }
 
@@ -127,6 +132,7 @@ static void* fakeDriver(void *args) {
 static void* clientProgram(void *args) {
   ExecArgs *execArgs = (ExecArgs*) args;
   const char *mode = execArgs->argv[0];
+
   if (strcmp(mode, "exit") == 0) {
     return NULL;
   } else if (strcmp(mode, "overflow") == 0) {
@@ -137,9 +143,11 @@ static void* clientProgram(void *args) {
     char *argv[] = { "idle", NULL };
     execStatus = schedulerExecveFullPath(execArgs->argv[1], argv, NULL);
   }
+
   while (1) {
     processYield();
   }
+
   return NULL;
 }
 
@@ -164,16 +172,20 @@ static ProcessDescriptor* startDriver(void) {
   endedCount = 0;
   ProcessId pid = schedulerGetFirstShellPid() + schedulerGetNumShells();
   ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+
   processQueueRemove(halMockFreeQueue(), processDescriptor);
+
   if (processCreate(processDescriptor, fakeDriver, NULL) != processSuccess) {
     return NULL;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->readyQueue
     = halMockReadyQueue(PRIVILEGE_LEVEL_EXECUTIVE);
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
+
   return processDescriptor;
 }
 
@@ -196,9 +208,11 @@ static ProcessDescriptor* spawn(const char *path, char *mode, char *argument,
   posix_spawnattr_t attr = { .flags = system ? POSIX_SPAWN_SYSTEM : 0 };
   pid_t pid = 0;
   char *argv[] = { mode, argument, NULL };
+
   if (nanoOsSpawn(&pid, path, NULL, &attr, argv, NULL) != 0) {
     return NULL;
   }
+
   return &allProcesses[pid - 1];
 }
 
@@ -218,6 +232,7 @@ static uint32_t grantedTypes(ProcessDescriptor *from, ProcessId to) {
       return from->ipcCapabilities[ii].messageTypes;
     }
   }
+
   return 0;
 }
 
@@ -249,10 +264,12 @@ static int killPid(ProcessId pid) {
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &args, sizeof(args), true);
+
   if (processMessage != NULL) {
     processMessageWaitForDone(processMessage, NULL);
     processMessageRelease(processMessage);
   }
+
   return args.returnValue;
 }
 
@@ -407,6 +424,7 @@ NANO_OS_KERNEL_TEST_WITH(graphics_client, a_client_execing_itself_is_reported_an
   ProcessDescriptor *client = spawn(CLIENT_NAME, "exec", CLIENT_PATH, true);
   NANO_OS_ASSERT_NOT_NULL(client);
   ProcessId pid = client->processId;
+
   NANO_OS_ASSERT_EQ_INT(0, addProcessIpcCapability(client, schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_EXECVE));
 
@@ -430,11 +448,13 @@ NANO_OS_TEST(graphics_client, the_message_masks_hold_exactly_their_types) {
   NANO_OS_ASSERT_EQ_INT(25, GFX_MSG_DISPLAY_REVOKED);
   NANO_OS_ASSERT_EQ_INT(31, GFX_MSG_CLIENT_ENDED);
   NANO_OS_ASSERT_EQ_INT(32, GFX_NUM_MESSAGE_TYPES);
+
   for (int type = 0; type < 32; type++) {
     if (((GFX_CLIENT_MESSAGE_MASK | GFX_DRIVER_MESSAGE_MASK) >> type) & 1) {
       NANO_OS_ASSERT_TRUE(type < GFX_NUM_MESSAGE_TYPES);
     }
   }
+
   NANO_OS_ASSERT_EQ_INT(0,
     GFX_CLIENT_MESSAGE_MASK & (((uint32_t) 1) << GFX_MSG_CLIENT_ENDED));
   NANO_OS_ASSERT_EQ_INT(0,

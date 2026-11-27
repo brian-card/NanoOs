@@ -130,6 +130,7 @@ static GfxEvent pointerEvent(int16_t pointerX, int16_t pointerY,
   event.wheel = wheel;
   event.x = pointerX;
   event.y = pointerY;
+
   return event;
 }
 
@@ -154,6 +155,7 @@ static GfxEvent keyEvent(uint8_t ascii, uint8_t modifiers, uint8_t keycode,
   event.modifiers = modifiers;
   event.keycode = keycode;
   event.down = down;
+
   return event;
 }
 
@@ -187,6 +189,7 @@ NANO_OS_TEST(unit_vdp_events, hundred_motions_leave_one_event_at_the_last) {
   }
 
   GfxEvent expected = pointerEvent(297, 198, 0, 0);
+
   NANO_OS_ASSERT_EQ_INT(1, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&expected, &queue.events[0]));
 }
@@ -206,7 +209,9 @@ NANO_OS_TEST(unit_vdp_events, press_motion_and_release_keep_all_three) {
     pointerEvent(35, 45, 1, 0),
     pointerEvent(35, 45, 0, 0),
   };
+
   NANO_OS_ASSERT_EQ_INT(3, queue.count);
+
   for (int ii = 0; ii < 3; ii++) {
     NANO_OS_ASSERT_TRUE(sameEvent(&expected[ii], &queue.events[ii]));
   }
@@ -217,17 +222,19 @@ NANO_OS_TEST(unit_vdp_events, keys_past_a_full_message_leave_an_overflow) {
   memset(&queue, 0, sizeof(queue));
   VdpEventState state = { 0 };
 
-  for (int ii = 0; ii < GFX_EVENTS_PER_MESSAGE + 12; ii++) {
+  for (int ii = 0; ii < (GFX_EVENTS_PER_MESSAGE + 12); ii++) {
     key(&queue, &state, (uint8_t) ('a' + (ii % 26)), 0x40,
       (uint8_t) (KEYCODE_a + (ii % 26)), 1);
   }
 
   NANO_OS_ASSERT_EQ_INT(GFX_EVENTS_PER_MESSAGE, queue.count);
-  for (int ii = 0; ii < GFX_EVENTS_PER_MESSAGE - 1; ii++) {
+
+  for (int ii = 0; ii < (GFX_EVENTS_PER_MESSAGE - 1); ii++) {
     GfxEvent expected = keyEvent((uint8_t) ('a' + (ii % 26)), 0x40,
       (uint8_t) ('a' + (ii % 26)), 1);
     NANO_OS_ASSERT_TRUE(sameEvent(&expected, &queue.events[ii]));
   }
+
   GfxEvent overflow;
   memset(&overflow, 0, sizeof(overflow));
   overflow.type = GFX_EVENT_OVERFLOW;
@@ -245,6 +252,7 @@ NANO_OS_TEST(unit_vdp_events, key_releases_keep_their_key_and_modifiers) {
 
   GfxEvent press = keyEvent(0, GFX_MOD_CTRL | GFX_MOD_GUI, GFX_KEY_RIGHT, 1);
   GfxEvent release = keyEvent(0, GFX_MOD_CTRL | GFX_MOD_GUI, GFX_KEY_RIGHT, 0);
+
   NANO_OS_ASSERT_EQ_INT(2, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&press, &queue.events[0]));
   NANO_OS_ASSERT_TRUE(sameEvent(&release, &queue.events[1]));
@@ -260,6 +268,7 @@ NANO_OS_TEST(unit_vdp_events, coalesced_motion_adds_up_the_wheel) {
   mouse(&queue, &state, 3, 3, 0, -3);
 
   GfxEvent expected = pointerEvent(3, 3, 0, -1);
+
   NANO_OS_ASSERT_EQ_INT(1, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&expected, &queue.events[0]));
 }
@@ -279,7 +288,9 @@ NANO_OS_TEST(unit_vdp_events, a_key_between_motions_keeps_them_apart) {
     keyEvent('q', 0, 'q', 1),
     pointerEvent(9, 10, 0, 0),
   };
+
   NANO_OS_ASSERT_EQ_INT(3, queue.count);
+
   for (int ii = 0; ii < 3; ii++) {
     NANO_OS_ASSERT_TRUE(sameEvent(&expected[ii], &queue.events[ii]));
   }
@@ -295,6 +306,7 @@ NANO_OS_TEST(unit_vdp_events, motion_after_a_send_starts_a_new_event) {
   mouse(&queue, &state, 640, 479, 0, 0);
 
   GfxEvent expected = pointerEvent(640, 479, 0, 0);
+
   NANO_OS_ASSERT_EQ_INT(1, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&expected, &queue.events[0]));
 }
@@ -307,6 +319,7 @@ NANO_OS_TEST(unit_vdp_events, a_full_queue_overflows_on_motion_too) {
   for (int ii = 0; ii < GFX_EVENTS_PER_MESSAGE; ii++) {
     mouse(&queue, &state, 1, 1, (uint8_t) (ii & 1), 0);
   }
+
   mouse(&queue, &state, 2, 2, 1, 0);
   mouse(&queue, &state, 3, 3, 1, 0);
 
@@ -314,6 +327,7 @@ NANO_OS_TEST(unit_vdp_events, a_full_queue_overflows_on_motion_too) {
   memset(&overflow, 0, sizeof(overflow));
   overflow.type = GFX_EVENT_OVERFLOW;
   GfxEvent last = pointerEvent(1, 1, 0, 0);
+
   NANO_OS_ASSERT_EQ_INT(GFX_EVENTS_PER_MESSAGE, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&last,
     &queue.events[GFX_EVENTS_PER_MESSAGE - 2]));
@@ -346,6 +360,7 @@ NANO_OS_TEST(unit_vdp_events, num_lock_bit_is_the_drivers_not_the_vdps) {
 
   GfxEvent off = keyEvent('x', GFX_MOD_SHIFT, 'x', 1);
   GfxEvent on = keyEvent('x', GFX_MOD_SHIFT | GFX_MOD_NUM_LOCK, 'x', 1);
+
   NANO_OS_ASSERT_EQ_INT(2, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&off, &queue.events[0]));
   NANO_OS_ASSERT_TRUE(sameEvent(&on, &queue.events[1]));
@@ -362,6 +377,7 @@ NANO_OS_TEST(unit_vdp_events, keypad_keys_follow_the_drivers_num_lock) {
 
   GfxEvent digit = keyEvent('8', GFX_MOD_NUM_LOCK, '8', 1);
   GfxEvent up = keyEvent(0, 0, GFX_KEY_UP, 1);
+
   NANO_OS_ASSERT_EQ_INT(3, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&digit, &queue.events[0]));
   NANO_OS_ASSERT_TRUE(sameEvent(&up, &queue.events[1]));

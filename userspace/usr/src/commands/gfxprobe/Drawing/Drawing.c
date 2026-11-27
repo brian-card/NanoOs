@@ -50,6 +50,7 @@ void* gfxprobeDrawing(void *args) {
   ProbeArgs *probeArgs = (ProbeArgs*) args;
   GfxDisplay *disp = probeArgs->disp;
   GfxCmdBuf *buf = gfxCmdBufCreate(disp, 64);
+
   if (buf == NULL) {
     printf("gfxprobe: no memory\n");
     probeArgs->status = 1;
@@ -58,13 +59,17 @@ void* gfxprobeDrawing(void *args) {
 
   GfxHandle handle = GFX_INVALID_HANDLE;
   GfxRect rect = { 0, 0, 1, 1 };
+
   gfxCmdBufBegin(buf, 0);
   gfxCmdDrawRect(buf, &rect, true);
   GfxError status = gfxSubmit(buf);
+
   gfxCmdDrawRect(buf, &rect, true);
+
   if (status == GFX_OK) {
     status = gfxSubmit(buf);
   }
+
   report("SUBMIT", status);
   gfxCmdBufBegin(buf, GFX_CMDBUF_NO_FLUSH);
   gfxCmdDrawRect(buf, &rect, true);
@@ -84,5 +89,6 @@ void* gfxprobeDrawing(void *args) {
 
   gfxCmdBufDestroy(buf);
   probeArgs->status = 0;
+
   return probeArgs;
 }

@@ -58,22 +58,26 @@ static GfxError uploadImage(GfxDisplay *disp, char **words,
 ) {
   GfxImageDesc desc = { 0 };
   desc.format = GFX_FMT_RGB888;
+
   if (strcmp(words[0], "rgba8888") == 0) {
     desc.format = GFX_FMT_RGBA8888;
   } else if (strcmp(words[0], "rgba2222") == 0) {
     desc.format = GFX_FMT_RGBA2222;
   }
+
   desc.width = (uint16_t) strtol(words[1], NULL, 0);
   desc.height = (uint16_t) strtol(words[2], NULL, 0);
   uint8_t *pixels = NULL;
+
   if (strcmp(words[3], "pattern") == 0) {
     desc.format = GFX_FMT_RGBA8888;
-    desc.size = (size_t) desc.width * desc.height * 4;
+    desc.size = ((size_t) desc.width) * desc.height * 4;
     pixels = (uint8_t*) malloc(desc.size);
     if (pixels == NULL) {
       return GFX_ERR_OUT_OF_MEMORY;
     }
-    for (size_t ii = 0; ii < (size_t) desc.width * desc.height; ii++) {
+
+    for (size_t ii = 0; ii < (((size_t) desc.width) * desc.height); ii++) {
       GfxColor color = cgaColorPalette[
         ((ii % desc.width) + (ii / desc.width)) % 16];
       pixels[(ii * 4) + 0] = (uint8_t) (color >> 24);
@@ -87,9 +91,12 @@ static GfxError uploadImage(GfxDisplay *disp, char **words,
       return GFX_ERR_OUT_OF_MEMORY;
     }
   }
+
   desc.pixels = pixels;
   GfxError status = gfxUploadImage(disp, &desc, handle);
+
   free(pixels);
+
   return status;
 }
 
@@ -103,7 +110,8 @@ static GfxError uploadImage(GfxDisplay *disp, char **words,
 static long elapsedMs(const struct timespec *start) {
   struct timespec now;
   timespec_get(&now, TIME_UTC);
-  return ((long) (now.tv_sec - start->tv_sec) * 1000L)
+
+  return (((long) (now.tv_sec - start->tv_sec)) * 1000L)
     + ((now.tv_nsec - start->tv_nsec) / 1000000L);
 }
 
@@ -137,6 +145,7 @@ void* gfxprobeMedia(void *args) {
     uint16_t width = 0, height = 0;
     GfxError status = gfxGetImageSize(disp,
       (GfxHandle) strtol(words[1], NULL, 0), &width, &height);
+
     printf("gfxprobe: size %s %ux%u\n", gfxErrorString(status),
       (unsigned int) width, (unsigned int) height);
     paintArgs->consumed = 2;
@@ -154,6 +163,7 @@ void* gfxprobeMedia(void *args) {
       (int16_t) strtol(words[3], NULL, 0), (int16_t) strtol(words[4], NULL, 0)
     };
     GfxError status = gfxCaptureRect(disp, &rect, &handle);
+
     printf("gfxprobe: capture %s 0x%x\n", gfxErrorString(status),
       (unsigned int) handle);
     paintArgs->consumed = 5;
@@ -161,9 +171,11 @@ void* gfxprobeMedia(void *args) {
     GfxImageDesc desc = { 1, 1, GFX_FMT_RGBA2222, NULL, 1 };
     GfxError status = GFX_OK;
     int count = 0;
+
     while ((status = gfxUploadImage(disp, &desc, &handle)) == GFX_OK) {
       count++;
     }
+
     printf("gfxprobe: fill %d %s\n", count, gfxErrorString(status));
     paintArgs->consumed = 1;
   } else if (strcmp(step, "time") == 0) {
@@ -178,5 +190,6 @@ void* gfxprobeMedia(void *args) {
       elapsedMs(&start));
     paintArgs->consumed = 1;
   }
+
   return args;
 }

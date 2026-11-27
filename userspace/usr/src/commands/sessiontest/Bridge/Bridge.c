@@ -100,15 +100,19 @@ typedef struct Bridge {
 /// @return This function returns no value.
 static void writeString(int32_t uart, const char *string) {
   const char *start = string;
+
   for (const char *cursor = string; ; cursor++) {
     if ((*cursor != '\n') && (*cursor != '\0')) {
       continue;
     }
+
     getHal()->uart->write(uart, (const uint8_t*) start,
       (ssize_t) (cursor - start), NULL);
+
     if (*cursor == '\0') {
       break;
     }
+
     getHal()->uart->write(uart, (const uint8_t*) "\r\n", 2, NULL);
     start = cursor + 1;
   }
@@ -125,21 +129,25 @@ static void writeString(int32_t uart, const char *string) {
 /// @return This function returns no value.
 static void waitForInput(Bridge *bridge) {
   if (bridge->waiting
-    || (INPUT_QUEUE_SIZE - bridge->count < CONSOLE_BUFFER_SIZE)
+    || ((INPUT_QUEUE_SIZE - bridge->count) < CONSOLE_BUFFER_SIZE)
   ) {
     return;
   }
+
   ProcessMessage *message = getAvailableMessage();
   if (message == NULL) {
     return;
   }
+
   processMessageInit(message,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_WAIT_FOR_INPUT, NULL, 0,
     /* waiting= */ false);
+
   if (sendProcessMessageToPid(bridge->consolePid, message) != processSuccess) {
     processMessageRelease(message);
     return;
   }
+
   bridge->waiting = true;
 }
 
@@ -160,11 +168,14 @@ static void sendWinsize(Bridge *bridge, const char *report) {
   ) {
     return;
   }
+
   char *end = NULL;
   long rows = strtol(&report[5], &end, 10);
+
   if (*end != ';') {
     return;
   }
+
   long columns = strtol(end + 1, &end, 10);
   if ((*end != ';') || (rows <= 0) || (columns <= 0)) {
     return;
@@ -174,15 +185,18 @@ static void sendWinsize(Bridge *bridge, const char *report) {
   if (message == NULL) {
     return;
   }
+
   bridge->winsizeArgs.rows = (uint16_t) rows;
   bridge->winsizeArgs.columns = (uint16_t) columns;
   bridge->winsizeArgs.returnValue = 0;
   processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
     &bridge->winsizeArgs, sizeof(bridge->winsizeArgs), /* waiting= */ true);
+
   if (sendProcessMessageToPid(bridge->consolePid, message) != processSuccess) {
     processMessageRelease(message);
     return;
   }
+
   bridge->winsizeMessage = message;
 }
 
@@ -217,13 +231,16 @@ static void sendInput(Bridge *bridge) {
     processMessageRelease(bridge->winsizeMessage);
     bridge->winsizeMessage = NULL;
   }
+
   if (bridge->inputMessage != NULL) {
     if (processMessageDone(bridge->inputMessage) == false) {
       return;
     }
+
     processMessageRelease(bridge->inputMessage);
     bridge->inputMessage = NULL;
   }
+
   if (bridge->count == 0) {
     return;
   }
@@ -232,20 +249,24 @@ static void sendInput(Bridge *bridge) {
   if (message == NULL) {
     return;
   }
+
   uint8_t numBytes = 0;
   while ((numBytes < CONSOLE_INPUT_READY_SIZE) && (bridge->count > 0)) {
     bridge->inputArgs.bytes[numBytes++] = bridge->queue[bridge->head];
     bridge->head = (bridge->head + 1) % INPUT_QUEUE_SIZE;
     bridge->count--;
   }
+
   bridge->inputArgs.portId = bridge->port;
   bridge->inputArgs.numBytes = numBytes;
   processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
     &bridge->inputArgs, sizeof(bridge->inputArgs), /* waiting= */ true);
+
   if (sendProcessMessageToPid(bridge->consolePid, message) != processSuccess) {
     processMessageRelease(message);
     return;
   }
+
   bridge->inputMessage = message;
 }
 
@@ -266,10 +287,12 @@ static ProcessMessage* nextMessage(Bridge *bridge) {
   struct timespec deadline;
   timespec_get(&deadline, TIME_UTC);
   deadline.tv_nsec += INPUT_WAIT_NS;
+
   if (deadline.tv_nsec >= 1000000000L) {
     deadline.tv_sec++;
     deadline.tv_nsec -= 1000000000L;
   }
+
   return processMessageQueueWait(&deadline);
 }
 
@@ -290,7 +313,9 @@ static int bridge(int32_t uart, uint8_t rows, uint8_t columns) {
     fputs("sessiontest: out of memory\n", stderr);
     return 1;
   }
+
   bridge->uart = uart;
+
   if (findProcessByName(CONSOLE_PROCESS_NAME, &bridge->consolePid) != 0) {
     fputs("sessiontest: no console\n", stderr);
     free(bridge);
@@ -299,6 +324,7 @@ static int bridge(int32_t uart, uint8_t rows, uint8_t columns) {
 
   struct termios original;
   struct termios raw;
+
   tcgetattr(STDIN_FILENO, &original);
   raw = original;
   raw.c_lflag &= ~(ECHO | ICANON | ISIG);
@@ -309,11 +335,13 @@ static int bridge(int32_t uart, uint8_t rows, uint8_t columns) {
     != 0
   ) {
     int openErrno = errno;
+
     tcsetattr(STDIN_FILENO, TCSANOW, &original);
     fprintf(stderr, "sessiontest: open failed: %s\n", strerror(openErrno));
     free(bridge);
     return 1;
   }
+
   char line[64];
   snprintf(line, sizeof(line), "sessiontest: opened port %d shell %d\n",
     bridge->port, shell);
@@ -335,15 +363,19 @@ static int bridge(int32_t uart, uint8_t rows, uint8_t columns) {
         sendWinsize(bridge, consoleBuffer->buffer);
         queueInput(bridge, consoleBuffer->buffer);
       }
+
       if (processMessageWaiting(message) == false) {
         processMessageRelease(message);
       } else {
         processMessageSetDone(message);
       }
+
       bridge->waiting = false;
     } else if (type == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_SESSION_ENDED)) {
       uint8_t port = (uint8_t) (uintptr_t) processMessageData(message);
+
       processMessageRelease(message);
+
       if (port == bridge->port) {
         break;
       }
@@ -352,6 +384,7 @@ static int bridge(int32_t uart, uint8_t rows, uint8_t columns) {
       if (text != NULL) {
         writeString(uart, text);
       }
+
       consoleOutputDone(message);
     }
   }
@@ -360,15 +393,18 @@ static int bridge(int32_t uart, uint8_t rows, uint8_t columns) {
     processMessageWaitForDone(bridge->inputMessage, NULL);
     processMessageRelease(bridge->inputMessage);
   }
+
   if (bridge->winsizeMessage != NULL) {
     processMessageWaitForDone(bridge->winsizeMessage, NULL);
     processMessageRelease(bridge->winsizeMessage);
   }
+
   tcsetattr(STDIN_FILENO, TCSANOW, &original);
   snprintf(line, sizeof(line), "sessiontest: session ended port %d\n",
     bridge->port);
   writeString(uart, line);
   free(bridge);
+
   return 0;
 }
 
@@ -383,5 +419,6 @@ void* bridgeSession(void *args) {
   BridgeArgs *bridgeArgs = (BridgeArgs*) args;
   bridgeArgs->status
     = bridge(bridgeArgs->uart, bridgeArgs->rows, bridgeArgs->columns);
+
   return args;
 }

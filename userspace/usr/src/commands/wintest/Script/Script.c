@@ -99,6 +99,7 @@ static int nameIndex(const char *name, const char *const *names, int count) {
       return ii;
     }
   }
+
   return -1;
 }
 
@@ -113,20 +114,25 @@ static int nameIndex(const char *name, const char *const *names, int count) {
 static bool parseFrame(const char *text, GfxRect *frame) {
   int16_t values[4];
   int last = WINTEST_COUNT(values) - 1;
+
   for (int ii = 0; ii <= last; ii++) {
     char *end = NULL;
     values[ii] = (int16_t) strtol(text, &end, 10);
+
     if ((end == text) || ((ii < last) && (*end != ','))
       || ((ii == last) && *end)
     ) {
       return false;
     }
+
     text = end + 1;
   }
+
   frame->x = values[0];
   frame->y = values[1];
   frame->w = values[2];
   frame->h = values[3];
+
   return true;
 }
 
@@ -148,23 +154,28 @@ static int parseFlags(const char *text) {
     WIN_FLAG_RESERVE_LEFT, WIN_FLAG_RESERVE_RIGHT,
   };
   int flags = WIN_FLAG_DECORATED | WIN_FLAG_IN_TASKBAR | WIN_FLAG_RESIZABLE;
+
   while ((text != NULL) && (*text != '\0')) {
     const char *comma = strchr(text, ',');
     size_t length = (comma != NULL) ? (size_t) (comma - text) : strlen(text);
     int index = -1;
-    for (int ii = 0; ii < (int) WINTEST_COUNT(names); ii++) {
+
+    for (int ii = 0; ii < ((int) WINTEST_COUNT(names)); ii++) {
       if ((strlen(names[ii]) == length)
         && (strncmp(text, names[ii], length) == 0)
       ) {
         index = ii;
       }
     }
+
     if (index < 0) {
       return -1;
     }
+
     flags ^= bits[index];
-    text = (comma != NULL) ? comma + 1 : text + length;
+    text = (comma != NULL) ? (comma + 1) : (text + length);
   }
+
   return flags;
 }
 
@@ -204,19 +215,24 @@ static int run(Wintest *wintest) {
   int argc = wintest->argc;
   char **argv = wintest->argv;
   int ii = WINTEST_SCRIPT_START;
+
   while (ii < argc) {
     const char *command = argv[ii++];
     const char *first = (ii < argc) ? argv[ii] : NULL;
-    if ((strcmp(command, "create") == 0) && (ii + 1 < argc)) {
+
+    if ((strcmp(command, "create") == 0) && ((ii + 1) < argc)) {
       GfxRect frame;
       if (!parseFrame(argv[ii], &frame)) {
         fputs("wintest: bad command\n", stderr);
         return 1;
       }
+
       const char *title = argv[ii + 1];
+
       ii += 2;
       int layer = WIN_LAYER_NORMAL;
       const char *flags = NULL;
+
       while ((ii < argc) && (strchr(argv[ii], '=') != NULL)) {
         if (strncmp(argv[ii], WINTEST_OPTION_LAYER,
           WINTEST_LITERAL_LENGTH(WINTEST_OPTION_LAYER)) == 0
@@ -229,13 +245,16 @@ static int run(Wintest *wintest) {
         ) {
           flags = &argv[ii][WINTEST_LITERAL_LENGTH(WINTEST_OPTION_FLAGS)];
         }
+
         ii++;
       }
+
       int bits = parseFlags(flags);
       if ((layer < 0) || (bits < 0)) {
         fputs("wintest: bad command\n", stderr);
         return 1;
       }
+
       int window = winCreateWindow(session, title, frame, (uint8_t) layer,
         (uint8_t) bits);
       if (window < 0) {
@@ -244,7 +263,7 @@ static int run(Wintest *wintest) {
         printf("wintest: window %d\n", window);
         wintest->last = (uint8_t) window;
       }
-    } else if ((strcmp(command, "title") == 0) && (ii + 1 < argc)) {
+    } else if ((strcmp(command, "title") == 0) && ((ii + 1) < argc)) {
       int rc = winSetTitle(session, (uint8_t) strtol(first, NULL, 10),
         argv[ii + 1]);
       if (rc < 0) {
@@ -252,19 +271,22 @@ static int run(Wintest *wintest) {
       } else {
         printf("wintest: titled %s\n", first);
       }
+
       ii += 2;
-    } else if ((strcmp(command, "state") == 0) && (ii + 1 < argc)) {
+    } else if ((strcmp(command, "state") == 0) && ((ii + 1) < argc)) {
       int state = nameIndex(argv[ii + 1], _stateNames,
         WINTEST_COUNT(_stateNames));
       if (state < 0) {
         fputs("wintest: bad command\n", stderr);
         return 1;
       }
+
       int rc = winSetState(session, (uint8_t) strtol(first, NULL, 10),
         (uint8_t) state);
       if (rc < 0) {
         print(wintest, command, first, rc);
       }
+
       ii += 2;
     } else if ((strcmp(command, "destroy") == 0) && (first != NULL)) {
       winDestroyWindow(session, (uint8_t) strtol(first, NULL, 10));
@@ -272,6 +294,7 @@ static int run(Wintest *wintest) {
     } else if ((strcmp(command, "sleep") == 0) && (first != NULL)) {
       struct timespec delay = { 0, 0 };
       long ms = strtol(first, NULL, 10);
+
       delay.tv_sec = ms / WINTEST_MS_PER_SECOND;
       delay.tv_nsec = (ms % WINTEST_MS_PER_SECOND) * WINTEST_NS_PER_MS;
       nanosleep(&delay, NULL);
@@ -289,22 +312,26 @@ static int run(Wintest *wintest) {
     } else {
       wintest->index = ii - 1;
       wintest->handled = false;
-      for (size_t jj = 0; !wintest->handled && (jj < WINTEST_COUNT(_commands));
+      for (size_t jj = 0;
+        (!wintest->handled) && (jj < WINTEST_COUNT(_commands));
         jj++
       ) {
         callOverlayFunction(OVERLAY_SAME_NAMESPACE, _commands[jj].overlay,
           _commands[jj].function, wintest);
       }
+
       if (!wintest->handled) {
         fputs("wintest: bad command\n", stderr);
         return 1;
       }
+
       ii = wintest->index;
     }
   }
 
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Print", "wintestEvents",
     wintest);
+
   return 0;
 }
 
@@ -318,5 +345,6 @@ static int run(Wintest *wintest) {
 void* wintestRun(void *args) {
   Wintest *wintest = (Wintest*) args;
   wintest->rc = run(wintest);
+
   return args;
 }

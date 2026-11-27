@@ -189,14 +189,17 @@ static const GfxRect _vdpScreen = { 0, 0, VDP_SCREEN_WIDTH, VDP_SCREEN_HEIGHT };
 /// @return This function returns no value.
 static void vdpEmit(VdpSink *sink, const uint8_t *bytes, uint8_t length) {
   sink->total += length;
+
   if (sink->counting == true) {
     return;
   }
-  if (sink->length + length > VDP_SINK_SIZE) {
+
+  if ((sink->length + length) > VDP_SINK_SIZE) {
     vdpWrite(sink->data, sink->length);
     sink->length = 0;
     vdpReceive(sink->input);
   }
+
   memcpy(&sink->data[sink->length], bytes, length);
   sink->length += length;
 }
@@ -239,12 +242,15 @@ static void vdpIntersect(GfxRect *result, const GfxRect *rect,
   int top = (rect->y > other->y) ? rect->y : other->y;
   int right = rect->x + rect->w;
   int bottom = rect->y + rect->h;
-  if (other->x + other->w < right) {
+
+  if ((other->x + other->w) < right) {
     right = other->x + other->w;
   }
-  if (other->y + other->h < bottom) {
+
+  if ((other->y + other->h) < bottom) {
     bottom = other->y + other->h;
   }
+
   result->x = (int16_t) left;
   result->y = (int16_t) top;
   result->w = (right > left) ? (int16_t) (right - left) : 0;
@@ -283,14 +289,18 @@ static bool vdpClipReady(VdpWalk *walk) {
   if (walk->preload == true) {
     return true;
   }
+
   VdpDrawState *draw = walk->draw;
   const GfxRect *clip = &draw->clip[draw->clipDepth];
+
   if ((clip->w <= 0) || (clip->h <= 0)) {
     return false;
   }
+
   if (memcmp(clip, &draw->vdpClip, sizeof(*clip)) != 0) {
     vdpViewport(walk, clip);
   }
+
   return true;
 }
 
@@ -326,6 +336,7 @@ static void vdpSyncPen(VdpWalk *walk) {
     pen->vdpFg = pen->fg;
     pen->vdpBlend = pen->blend;
   }
+
   if (pen->bg != pen->vdpBg) {
     const uint8_t gcol[] = { 18, 0, (uint8_t) (128 + pen->bg) };
     vdpEmit(&walk->sink, gcol, sizeof(gcol));
@@ -359,9 +370,12 @@ static void vdpDrawText(VdpWalk *walk, int16_t left, int16_t top,
     vdpEmit(&walk->sink, select, sizeof(select));
     pen->vdpFont = pen->font;
   }
+
   vdpPlot(walk, VDP_PLOT_MOVE, left, top);
+
   for (uint8_t ii = 0; ii < length; ii++) {
     uint8_t glyph[] = { 27, text[ii] };
+
     if ((text[ii] < 32) || (text[ii] == 127)) {
       vdpEmit(&walk->sink, glyph, sizeof(glyph));
     } else {
@@ -415,21 +429,26 @@ static void vdpCopy(VdpWalk *walk, int16_t left, int16_t top, int16_t width,
       width += left;
       left = 0;
     }
+
     if (top < 0) {
       toTop -= top;
       height += top;
       top = 0;
     }
-    if (left + width > VDP_SCREEN_WIDTH) {
+
+    if ((left + width) > VDP_SCREEN_WIDTH) {
       width = VDP_SCREEN_WIDTH - left;
     }
-    if (top + height > VDP_SCREEN_HEIGHT) {
+
+    if ((top + height) > VDP_SCREEN_HEIGHT) {
       height = VDP_SCREEN_HEIGHT - top;
     }
   }
+
   if ((width <= 0) || (height <= 0)) {
     return;
   }
+
   vdpPlot(walk, VDP_PLOT_MOVE, left, top);
   vdpPlot(walk, VDP_PLOT_MOVE, left + width - 1, top + height - 1);
   vdpPlot(walk, VDP_PLOT_COPY, toLeft, toTop + height - 1);
@@ -457,6 +476,7 @@ static void vdpScroll(VdpWalk *walk, int16_t left, int16_t top, int16_t width,
   int16_t bottom = top + height - 1;
   int16_t distanceX = (deltaX < 0) ? -deltaX : deltaX;
   int16_t distanceY = (deltaY < 0) ? -deltaY : deltaY;
+
   if ((width <= 0) || (height <= 0)) {
     return;
   }
@@ -465,15 +485,18 @@ static void vdpScroll(VdpWalk *walk, int16_t left, int16_t top, int16_t width,
     return;
   }
 
-  int16_t fromX = (deltaX < 0) ? left - deltaX : left;
-  int16_t fromY = (deltaY < 0) ? top - deltaY : top;
+  int16_t fromX = (deltaX < 0) ? (left - deltaX) : left;
+  int16_t fromY = (deltaY < 0) ? (top - deltaY) : top;
+
   vdpCopy(walk, fromX, fromY, width - distanceX, height - distanceY,
     fromX + deltaX, fromY + deltaY);
+
   if (deltaY > 0) {
     vdpFillBackground(walk, left, top, right, top + deltaY - 1);
   } else if (deltaY < 0) {
     vdpFillBackground(walk, left, bottom + deltaY + 1, right, bottom);
   }
+
   if (deltaX > 0) {
     vdpFillBackground(walk, left, top, left + deltaX - 1, bottom);
   } else if (deltaX < 0) {
@@ -496,6 +519,7 @@ static void vdpScroll(VdpWalk *walk, int16_t left, int16_t top, int16_t width,
 static void vdpScissor(VdpWalk *walk, uint8_t tag, const int16_t *words) {
   VdpDrawState *draw = walk->draw;
   GfxRect rect = { words[0], words[1], words[2], words[3] };
+
   if (tag == GFX_CMD_SET_ORIGIN) {
     draw->origin.x = words[0];
     draw->origin.y = words[1];
@@ -508,6 +532,7 @@ static void vdpScissor(VdpWalk *walk, uint8_t tag, const int16_t *words) {
       vdpSetError(walk->vdpOutput, GFX_ERR_INVALID_STATE);
       return;
     }
+
     rect.x += draw->origin.x;
     rect.y += draw->origin.y;
     vdpIntersect(&draw->clip[draw->clipDepth + 1], &rect,
@@ -536,15 +561,18 @@ static void vdpScissor(VdpWalk *walk, uint8_t tag, const int16_t *words) {
 /// uploaded.
 static uint8_t vdpSetPen(VdpWalk *walk, uint8_t tag, const uint8_t *params) {
   VdpPen *pen = walk->pen;
+
   if (tag == GFX_CMD_SET_BLEND) {
     if (params[0] > GFX_BLEND_INVERT) {
       return GFX_ERR_INVALID_STATE;
     }
+
     pen->blend = params[0];
   } else if (tag == GFX_CMD_SET_FONT) {
     VdpOutput *vdpOutput = walk->vdpOutput;
     GfxHandle font = (GfxHandle) (params[0] | (params[1] << 8));
     uint16_t slot = (uint16_t) (font - VDP_FONT_ID_BASE);
+
     if (font == GFX_INVALID_HANDLE) {
       slot = vdpOutput->ownerDefaultFont;
     } else if ((font < VDP_FONT_ID_BASE) || (slot == 0)
@@ -553,17 +581,20 @@ static uint8_t vdpSetPen(VdpWalk *walk, uint8_t tag, const uint8_t *params) {
     ) {
       return GFX_ERR_INVALID_HANDLE;
     }
+
     pen->font = (uint8_t) slot;
   } else {
     // A GfxColor is 0xRRGGBBAA, so red is its last byte.
     uint8_t index = rgb222ToCgaMap[(vdpChannelBits(params[3]) << 4)
       | (vdpChannelBits(params[2]) << 2) | vdpChannelBits(params[1])];
+
     if (tag == GFX_CMD_SET_FG_COLOR) {
       pen->fg = index;
     } else {
       pen->bg = index;
     }
   }
+
   return GFX_OK;
 }
 
@@ -587,10 +618,12 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
 ) {
   VdpDrawState *draw = walk->draw;
   bool forbidden = false;
+
   if (tag <= GFX_CMD_POP_SCISSOR) {
     if (walk->preload == true) {
       return GFX_ERR_INVALID_STATE;
     }
+
     vdpScissor(walk, tag, words);
     return GFX_OK;
   } else if (tag <= GFX_CMD_SET_FONT) {
@@ -601,6 +634,7 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
     ) {
       return GFX_ERR_INVALID_HANDLE;
     }
+
     forbidden = (tag == GFX_CMD_DRAW_SUB_IMAGE);
   } else if (tag == GFX_CMD_CALL) {
     if (vdpSlot(draw->preloadsUsed, (GfxHandle) words[0],
@@ -608,28 +642,35 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
     ) {
       return GFX_ERR_INVALID_HANDLE;
     }
+
     forbidden = true;
   }
+
   if ((forbidden == true) && (walk->preload == true)) {
     return GFX_ERR_INVALID_STATE;
   }
   if (vdpClipReady(walk) == false) {
     return GFX_OK;
   }
+
   vdpSyncPen(walk);
 
   int16_t firstX = words[0] + walk->origin.x;
   int16_t firstY = words[1] + walk->origin.y;
+
   if (tag == GFX_CMD_CLEAR) {
     const uint8_t clear[] = { 16 };
     vdpEmit(&walk->sink, clear, sizeof(clear));
   } else if (tag == GFX_CMD_DRAW_RECT) {
     int16_t right = firstX + words[2] - 1;
     int16_t bottom = firstY + words[3] - 1;
+
     if ((words[2] <= 0) || (words[3] <= 0)) {
       return GFX_OK;
     }
+
     vdpPlot(walk, VDP_PLOT_MOVE, firstX, firstY);
+
     if ((params[8] != 0) || (words[2] == 1) || (words[3] == 1)) {
       vdpPlot(walk, VDP_PLOT_RECTANGLE, right, bottom);
     } else {
@@ -647,7 +688,9 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
     int16_t secondY = words[3] + walk->origin.y;
     int16_t thirdX = words[4] + walk->origin.x;
     int16_t thirdY = words[5] + walk->origin.y;
+
     vdpPlot(walk, VDP_PLOT_MOVE, firstX, firstY);
+
     if (params[12] != 0) {
       vdpPlot(walk, VDP_PLOT_MOVE, secondX, secondY);
       vdpPlot(walk, VDP_PLOT_TRIANGLE, thirdX, thirdY);
@@ -660,6 +703,7 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
     if (words[2] <= 0) {
       return GFX_OK;
     }
+
     vdpPlot(walk, VDP_PLOT_MOVE, firstX, firstY);
     // The radius is relative to the center, so the origin isn't added.
     vdpPlot(walk, (params[6] != 0) ? VDP_PLOT_DISC : VDP_PLOT_CIRCLE,
@@ -674,9 +718,11 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
       words[5] + walk->origin.x, words[6] + walk->origin.y, words[3], words[4]
     };
     vdpIntersect(&target, &target, &draw->clip[draw->clipDepth]);
+
     if ((target.w == 0) || (target.h == 0)) {
       return GFX_OK;
     }
+
     vdpViewport(walk, &target);
     const uint8_t select[] = { 23, 27, 0x20, VDP_WORD(words[0]) };
     vdpEmit(&walk->sink, select, sizeof(select));
@@ -698,6 +744,7 @@ static uint8_t vdpRecord(VdpWalk *walk, uint8_t tag, const int16_t *words,
   } else {
     vdpScroll(walk, firstX, firstY, words[2], words[3], words[4], words[5]);
   }
+
   return GFX_OK;
 }
 
@@ -721,6 +768,7 @@ static void vdpWalkInit(VdpWalk *walk, VdpOutput *vdpOutput, VdpPen *pen,
   walk->draw = vdpOutput->draw;
   walk->pen = pen;
   walk->preload = preload;
+
   if (preload == false) {
     walk->origin = walk->draw->origin;
   }
@@ -748,8 +796,10 @@ static uint8_t vdpWalkRecords(VdpWalk *walk, const uint8_t *data,
     if (tag >= GFX_CMD_COUNT) {
       return GFX_ERR_INVALID_STATE;
     }
+
     uint32_t left = size - position;
     uint16_t length = _vdpRecordSizes[tag];
+
     if ((tag == GFX_CMD_DRAW_TEXT) && (length <= left)) {
       length += data[position + length - 1];
     }
@@ -759,16 +809,20 @@ static uint8_t vdpWalkRecords(VdpWalk *walk, const uint8_t *data,
 
     int16_t words[7];
     uint8_t numBytes = sizeof(words);
-    if (length - 1 < numBytes) {
+
+    if ((length - 1) < numBytes) {
       numBytes = (uint8_t) (length - 1);
     }
+
     memcpy(words, &data[position + 1], numBytes);
     uint8_t status = vdpRecord(walk, tag, words, &data[position + 1]);
     if (status != GFX_OK) {
       return status;
     }
+
     position += length;
   }
+
   return GFX_OK;
 }
 
@@ -786,10 +840,13 @@ static uint8_t vdpSubmit(VdpOutput *vdpOutput, const GfxSubmitArgs *args) {
   VdpWalk walk;
   vdpWalkInit(&walk, vdpOutput, &vdpOutput->draw->pen, false);
   uint8_t status = vdpWalkRecords(&walk, args->cmdData, args->cmdSize);
+
   vdpWrite(walk.sink.data, walk.sink.length);
+
   if (status != GFX_OK) {
     vdpSetError(vdpOutput, status);
   }
+
   return status;
 }
 
@@ -810,6 +867,7 @@ static uint8_t vdpSubmit(VdpOutput *vdpOutput, const GfxSubmitArgs *args) {
 static uint8_t vdpPreupload(VdpOutput *vdpOutput, GfxPreuploadArgs *args) {
   VdpDrawState *draw = vdpOutput->draw;
   uint8_t slot = vdpFreeSlot(draw->preloadsUsed, VDP_MAX_PRELOADS);
+
   if (slot == VDP_MAX_PRELOADS) {
     return GFX_ERR_OUT_OF_HANDLES;
   }
@@ -818,11 +876,13 @@ static uint8_t vdpPreupload(VdpOutput *vdpOutput, GfxPreuploadArgs *args) {
   uint32_t length = 0;
   VdpPen pen;
   VdpWalk walk;
+
   for (uint8_t pass = 0; pass < 2; pass++) {
     pen = draw->pen;
     vdpForgetPen(&pen);
     vdpWalkInit(&walk, vdpOutput, &pen, true);
     walk.sink.counting = (pass == 0);
+
     if (pass == 1) {
       const uint8_t write[] = {
         23, 0, 0xA0, VDP_WORD(id), 2,
@@ -830,18 +890,22 @@ static uint8_t vdpPreupload(VdpOutput *vdpOutput, GfxPreuploadArgs *args) {
       };
       vdpWrite(write, sizeof(write));
     }
+
     uint8_t status = vdpWalkRecords(&walk, args->cmdData, args->cmdSize);
     if (status != GFX_OK) {
       return status;
     }
+
     length = walk.sink.total;
     if (length > 0xFFFF) {
       return GFX_ERR_OUT_OF_MEMORY;
     }
   }
+
   vdpWrite(walk.sink.data, walk.sink.length);
   draw->preloadsUsed |= (uint16_t) (1 << slot);
   args->handle = id;
+
   return GFX_OK;
 }
 
@@ -860,28 +924,34 @@ void* vdpGraphics(void *args) {
   ProcessMessage *message = vdpOutput->graphicsMessage;
   int64_t type = processMessageType(message);
   GfxPreuploadArgs *payload = (GfxPreuploadArgs*) processMessageData(message);
-  if (((type & ~((int64_t) 0xff)) != GFX_COMMAND_SIGNATURE)
+
+  if (((type & (~((int64_t) 0xff))) != GFX_COMMAND_SIGNATURE)
     || (processMessageWaiting(message) == false) || (payload == NULL)
   ) {
     return args;
   }
 
   size_t size = sizeof(GfxSubmitArgs);
-  if ((uint8_t) type == GFX_MSG_PREUPLOAD) {
+
+  if (((uint8_t) type) == GFX_MSG_PREUPLOAD) {
     size = sizeof(GfxPreuploadArgs);
   }
+
   uint8_t status = GFX_OK;
+
   if ((processMessageSize(message) != size)
     || ((payload->cmdData == NULL) && (payload->cmdSize > 0))
   ) {
     status = GFX_ERR_INVALID_STATE;
   } else if (vdpOutput->owner != processPid(processMessageFrom(message))) {
     status = GFX_ERR_NOT_OWNER;
-  } else if ((uint8_t) type == GFX_MSG_SUBMIT) {
+  } else if (((uint8_t) type) == GFX_MSG_SUBMIT) {
     status = vdpSubmit(vdpOutput, (GfxSubmitArgs*) payload);
   } else {
     status = vdpPreupload(vdpOutput, payload);
   }
+
   payload->status = status;
+
   return args;
 }

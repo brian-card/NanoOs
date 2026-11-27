@@ -82,18 +82,21 @@ static WmWindow* windowAt(WmState *state, int16_t pointX, int16_t pointY) {
   for (int ii = state->numWindows - 1; ii >= 0; ii--) {
     WmWindow *window = &state->windows[ii];
     GfxRect area = window->frame;
+
     if (resizable(window)) {
       area.x -= WM_ZONE_OUTSIDE;
       area.y -= WM_ZONE_OUTSIDE;
       area.w += 2 * WM_ZONE_OUTSIDE;
       area.h += 2 * WM_ZONE_OUTSIDE;
     }
+
     if ((window->state != WIN_STATE_MINIMIZED)
       && wmContains(&area, pointX, pointY)
     ) {
       return window;
     }
   }
+
   return NULL;
 }
 
@@ -116,34 +119,39 @@ static uint8_t edgesAt(const WmWindow *window, int16_t pointX,
   if (!resizable(window)) {
     return 0;
   }
+
   const GfxRect *frame = &window->frame;
   int16_t right = frame->x + frame->w;
   int16_t bottom = frame->y + frame->h;
   uint8_t edges = 0;
-  if (pointX < frame->x + WM_ZONE_INSIDE) {
+
+  if (pointX < (frame->x + WM_ZONE_INSIDE)) {
     edges |= WM_EDGE_LEFT;
-  } else if (pointX >= right - WM_ZONE_INSIDE) {
+  } else if (pointX >= (right - WM_ZONE_INSIDE)) {
     edges |= WM_EDGE_RIGHT;
   }
-  if (pointY < frame->y + WM_ZONE_INSIDE) {
+
+  if (pointY < (frame->y + WM_ZONE_INSIDE)) {
     edges |= WM_EDGE_TOP;
-  } else if (pointY >= bottom - WM_ZONE_INSIDE) {
+  } else if (pointY >= (bottom - WM_ZONE_INSIDE)) {
     edges |= WM_EDGE_BOTTOM;
   }
+
   if ((edges & (WM_EDGE_LEFT | WM_EDGE_RIGHT)) != 0) {
-    if (pointY < frame->y + WM_ZONE_CORNER) {
+    if (pointY < (frame->y + WM_ZONE_CORNER)) {
       edges |= WM_EDGE_TOP;
-    } else if (pointY >= bottom - WM_ZONE_CORNER) {
+    } else if (pointY >= (bottom - WM_ZONE_CORNER)) {
       edges |= WM_EDGE_BOTTOM;
     }
   }
   if ((edges & (WM_EDGE_TOP | WM_EDGE_BOTTOM)) != 0) {
-    if (pointX < frame->x + WM_ZONE_CORNER) {
+    if (pointX < (frame->x + WM_ZONE_CORNER)) {
       edges |= WM_EDGE_LEFT;
-    } else if (pointX >= right - WM_ZONE_CORNER) {
+    } else if (pointX >= (right - WM_ZONE_CORNER)) {
       edges |= WM_EDGE_RIGHT;
     }
   }
+
   return edges;
 }
 
@@ -163,11 +171,12 @@ static void closePopups(WmState *state, int16_t pointX, int16_t pointY) {
     WmWindow *window = &state->windows[ii];
     if ((window->layer == WIN_LAYER_POPUP)
       && (window->state != WIN_STATE_MINIMIZED)
-      && !wmContains(&window->frame, pointX, pointY)
+      && (!wmContains(&window->frame, pointX, pointY))
     ) {
       window->state = WIN_STATE_MINIMIZED;
       wmDamage(state, &window->frame);
       wmSend(state, window->owner, WIN_EVENT_CLOSE_REQUESTED, window->id);
+
       if (state->focus == window->id) {
         wmActivate(state, wmFind(state, state->active));
       }
@@ -189,6 +198,7 @@ static void closePopups(WmState *state, int16_t pointX, int16_t pointY) {
 static bool controls(WmState *state, WmWindow *window, const char *function) {
   WmInputJob job = { state, window, state->event, false };
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Controls", function, &job);
+
   return job.handled;
 }
 
@@ -214,17 +224,20 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
     wmDamage(state, &state->shown);
     wmDamage(state, &moved->frame);
   }
+
   closePopups(state, pointX, pointY);
   WmWindow *window = windowAt(state, pointX, pointY);
   if (window == NULL) {
     return;
   }
+
   window = wmActivate(state, window);
 
   state->shown = window->frame;
   state->grabStart = window->frame;
   uint8_t edges = edgesAt(window, pointX, pointY);
   uint8_t button = wmButtonAt(window, pointX, pointY);
+
   if ((edges == 0) && (button != WM_BUTTON_NONE)) {
     state->grab = WM_GRAB_BUTTON;
     state->grabbed = window->id;
@@ -235,19 +248,23 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
   }
 
   const GfxRect *frame = &window->frame;
+
   if (edges != 0) {
     state->grab = WM_GRAB_RESIZE;
     state->edges = edges;
     state->offset.x = frame->x + frame->w - pointX;
+
     if ((edges & WM_EDGE_LEFT) != 0) {
       state->offset.x = pointX - frame->x;
     }
+
     state->offset.y = frame->y + frame->h - pointY;
+
     if ((edges & WM_EDGE_TOP) != 0) {
       state->offset.y = pointY - frame->y;
     }
   } else if (((window->flags & WIN_FLAG_DECORATED) != 0)
-    && (pointY < frame->y + WM_FRAME_TOP)
+    && (pointY < (frame->y + WM_FRAME_TOP))
   ) {
     if (wmDoubleClick(state, window, pointX, pointY)) {
       setState(state, window->id,
@@ -255,6 +272,7 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
         : WIN_STATE_MAXIMIZED);
       return;
     }
+
     state->grab = WM_GRAB_MOVE;
     state->restoreOnDrag = (window->state == WIN_STATE_MAXIMIZED);
     state->offset.x = pointX - frame->x;
@@ -263,13 +281,17 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
     if (window->widgets != NULL) {
       controls(state, window, "wmControlsPress");
     }
+
     return;
   }
+
   state->grabbed = window->id;
   bool live = state->liveResize;
+
   if (state->grab == WM_GRAB_MOVE) {
     live = state->liveMove;
   }
+
   if (!live) {
     state->outline = *frame;
   }
@@ -292,13 +314,17 @@ static void releaseButton(WmState *state, WmWindow *window, int16_t pointX,
   int16_t pointY
 ) {
   uint8_t button = state->pressButton;
+
   state->grab = WM_GRAB_NONE;
   state->pressButton = WM_BUTTON_NONE;
   state->pressInside = false;
+
   if (window == NULL) {
     return;
   }
+
   wmDamageButton(state, window->id, button);
+
   if (wmButtonAt(window, pointX, pointY) != button) {
     return;
   } else if (button == WM_BUTTON_CLOSE) {
@@ -328,16 +354,20 @@ static void restoreUnderPointer(WmState *state, int16_t pointX) {
   if (window == NULL) {
     return;
   }
+
   int16_t width = window->frame.w;
+
   setState(state, window->id, WIN_STATE_NORMAL);
   window = wmFind(state, state->grabbed);
   if ((window == NULL) || (width <= 0)) {
     return;
   }
-  state->offset.x = (int16_t) (((int32_t) state->offset.x * window->frame.w)
+
+  state->offset.x = (int16_t) ((((int32_t) state->offset.x) * window->frame.w)
     / width);
   window->frame.x = pointX - state->offset.x;
   state->shown = window->frame;
+
   if (!state->liveMove) {
     state->outline = window->frame;
   }
@@ -356,16 +386,19 @@ static void restoreUnderPointer(WmState *state, int16_t pointX) {
 /// @return This function returns no value.
 static void release(WmState *state, int16_t pointX, int16_t pointY) {
   WmWindow *window = wmFind(state, state->grabbed);
+
   if (state->grab == WM_GRAB_BUTTON) {
     releaseButton(state, window, pointX, pointY);
     return;
   }
+
   if ((window != NULL) && (state->outline.w != 0)) {
     window->frame = state->outline;
   }
   if (window != NULL) {
     wmResized(state, window, &state->grabStart);
   }
+
   memset(&state->outline, 0, sizeof(state->outline));
   state->grab = WM_GRAB_NONE;
 }
@@ -393,9 +426,11 @@ static void altTab(WmState *state) {
           "wmWindowSetState", state);
         window = wmFind(state, state->opWindow);
       }
+
       if (window != NULL) {
         wmActivate(state, window);
       }
+
       return;
     }
   }
@@ -423,17 +458,22 @@ static bool sendToConsole(WmState *state, ProcessMessage **message,
   ) {
     return false;
   }
+
   ProcessMessage *sent = getAvailableMessage();
   if (sent == NULL) {
     return false;
   }
+
   processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | command, args, size,
     /* waiting= */ true);
+
   if (sendProcessMessageToPid(state->consolePid, sent) != processSuccess) {
     processMessageRelease(sent);
     return false;
   }
+
   *message = sent;
+
   return true;
 }
 
@@ -450,6 +490,7 @@ static bool finished(ProcessMessage **message) {
     processMessageRelease(*message);
     *message = NULL;
   }
+
   return *message == NULL;
 }
 
@@ -469,6 +510,7 @@ static bool flushGrid(WmState *state, WmGrid *grid) {
   if (grid->port == WM_NO_PORT) {
     return false;
   }
+
   if (finished(&grid->winsize) && grid->winsizeWanted) {
     grid->winsizeArgs->rows = grid->rows;
     grid->winsizeArgs->columns = grid->columns;
@@ -476,28 +518,33 @@ static bool flushGrid(WmState *state, WmGrid *grid) {
     grid->winsizeWanted = !sendToConsole(state, &grid->winsize,
       CONSOLE_SET_WINSIZE, grid->winsizeArgs, sizeof(*grid->winsizeArgs));
   }
+
   if (grid->reportWanted) {
     char report[WM_GRID_HOLD + 1];
     int length = snprintf(report, sizeof(report), "\033[48;%u;%u;%u;%ut",
       (unsigned int) grid->rows, (unsigned int) grid->columns,
       (unsigned int) (grid->rows * state->display.builtInFont.glyphH),
       (unsigned int) (grid->columns * state->display.builtInFont.glyphW));
-    if ((length > 0) && (length <= WM_GRID_HOLD - grid->numHeld)) {
+
+    if ((length > 0) && (length <= (WM_GRID_HOLD - grid->numHeld))) {
       memcpy(&grid->held[grid->numHeld], report, (size_t) length);
       grid->numHeld += (uint8_t) length;
       grid->reportWanted = false;
     }
   }
+
   if (finished(&grid->input) && (grid->numHeld > 0)
-    && !grid->winsizeWanted
+    && (!grid->winsizeWanted)
   ) {
     uint8_t count = grid->numHeld;
     if (count > CONSOLE_INPUT_READY_SIZE) {
       count = CONSOLE_INPUT_READY_SIZE;
     }
+
     grid->inputArgs->portId = grid->port;
     grid->inputArgs->numBytes = count;
     memcpy(grid->inputArgs->bytes, grid->held, count);
+
     if (sendToConsole(state, &grid->input, CONSOLE_INPUT_READY,
         grid->inputArgs, sizeof(*grid->inputArgs))
     ) {
@@ -505,6 +552,7 @@ static bool flushGrid(WmState *state, WmGrid *grid) {
       memmove(grid->held, &grid->held[count], grid->numHeld);
     }
   }
+
   return (grid->numHeld > 0) || grid->winsizeWanted || grid->reportWanted;
 }
 
@@ -518,6 +566,7 @@ static bool flushGrid(WmState *state, WmGrid *grid) {
 /// @return This function returns no value.
 static void flushSessions(WmState *state) {
   state->inputWaiting = false;
+
   for (uint8_t ii = 0; ii < state->numWindows; ii++) {
     WmGrid *grid = (WmGrid*) state->windows[ii].content;
     if ((grid != NULL) && flushGrid(state, grid)) {
@@ -539,6 +588,7 @@ static void flushSessions(WmState *state) {
 /// @return This function returns no value.
 static void key(WmState *state, const GfxEvent *event) {
   WmWindow *window = wmFind(state, state->focus);
+
   if (((event->modifiers & WM_MOD_ALT) != 0)
     && ((event->keycode == GFX_KEY_TAB) || (event->keycode == GFX_KEY_F4))
   ) {
@@ -549,39 +599,49 @@ static void key(WmState *state, const GfxEvent *event) {
     } else if (window != NULL) {
       wmSend(state, window->owner, WIN_EVENT_CLOSE_REQUESTED, window->id);
     }
+
     return;
   } else if (window == NULL) {
     return;
   }
+
   WmGrid *grid = (WmGrid*) window->content;
   if ((grid != NULL) && (grid->port != WM_NO_PORT)) {
     uint8_t bytes[WM_KEY_MAX_BYTES];
     uint8_t count = 0;
+
     if (event->down != 0) {
       count = wmTranslateKey(event->keycode, event->ascii, bytes);
     }
-    if ((count > 0) && (count <= WM_GRID_HOLD - grid->numHeld)) {
+
+    if ((count > 0) && (count <= (WM_GRID_HOLD - grid->numHeld))) {
       memcpy(&grid->held[grid->numHeld], bytes, count);
       grid->numHeld += count;
-      if ((state->times != NULL) && !state->echoKey) {
+
+      if ((state->times != NULL) && (!state->echoKey)) {
         timespec_get(&state->keySent, TIME_UTC);
         state->echoKey = true;
       }
+
       flushSessions(state);
     }
+
     return;
   }
   if ((event->down == 0) && (event->keycode == state->widgetKey)) {
     state->widgetKey = 0;
+
     if (state->menu.swallow == event->keycode) {
       state->menu.swallow = 0;
     }
+
     return;
   } else if ((window->widgets != NULL)
     && controls(state, window, "wmControlsKey")
   ) {
     return;
   }
+
   WinEvent *sent = wmSend(state, window->owner, WIN_EVENT_KEY, window->id);
   if (sent != NULL) {
     sent->key = event->keycode;
@@ -602,6 +662,7 @@ static void key(WmState *state, const GfxEvent *event) {
 void* wmInput(void *args) {
   WmState *state = (WmState*) args;
   const GfxEvent *event = state->event;
+
   if (event == NULL) {
     flushSessions(state);
   } else if (event->type == GFX_EVENT_KEY) {
@@ -622,5 +683,6 @@ void* wmInput(void *args) {
   } else if (state->grab != WM_GRAB_NONE) {
     release(state, event->x, event->y);
   }
+
   return args;
 }

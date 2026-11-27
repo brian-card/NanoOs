@@ -46,8 +46,10 @@ static int sendToDriver(void) {
   if (connectDriver(&disp) != 0) {
     return 1;
   }
+
   GfxError status = gfxGetError(&disp);
   report("GET_ERROR", status);
+
   return (status == GFX_ERR_DEVICE_LOST) ? 1 : 0;
 }
 
@@ -63,8 +65,10 @@ static int cycleFonts(void) {
   if (connectDriver(&disp) != 0) {
     return 1;
   }
+
   GfxFontDesc font;
   void *bitmap = probeFont(&font);
+
   if (bitmap == NULL) {
     printf("gfxprobe: no memory\n");
     return 1;
@@ -72,16 +76,19 @@ static int cycleFonts(void) {
 
   report("open", gfxOpenDisplay(&disp, GFX_DRIVER_PROCESS_NAME, 640, 480));
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   for (int ii = 1; ii <= 4; ii++) {
     GfxError status = gfxUploadFont(&disp, &font, &handle);
     printf("gfxprobe: upload %d %s 0x%x\n", ii, gfxErrorString(status),
       (unsigned int) handle);
     report("destroy", gfxDestroyFont(&disp, handle));
   }
+
   report("default destroyed", gfxSetDefaultFont(&disp, handle));
   report("close", gfxCloseDisplay(&disp));
 
   free(bitmap);
+
   return 0;
 }
 
@@ -97,6 +104,7 @@ static int sendEveryType(void) {
   if (connectDriver(&disp) != 0) {
     return 1;
   }
+
   ProbeArgs probeArgs = { .disp = &disp, .status = 1 };
   if ((callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Resources",
       "gfxprobeResources", &probeArgs) != &probeArgs)
@@ -104,12 +112,15 @@ static int sendEveryType(void) {
   ) {
     return 1;
   }
+
   probeArgs.status = 1;
+
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Drawing",
       "gfxprobeDrawing", &probeArgs) != &probeArgs
   ) {
     return 1;
   }
+
   return probeArgs.status;
 }
 
@@ -132,41 +143,51 @@ static char** expandSteps(int numArgs, char **args, char **scripts,
 ) {
   int numScripts = 0;
   int capacity = numArgs;
+
   for (int ii = 0; ii < numArgs; ii++) {
     if ((args[ii][0] != '@') || (numScripts == 4)) {
       continue;
     }
+
     size_t length = 0;
     scripts[numScripts] = (char*) readFile(&args[ii][1], &length);
     if (scripts[numScripts] == NULL) {
       printf("gfxprobe: can't read %s\n", &args[ii][1]);
       return NULL;
     }
-    capacity += (int) (length / 2) + 1;
+
+    capacity += ((int) (length / 2)) + 1;
     numScripts++;
   }
 
-  char **steps = (char**) malloc(sizeof(char*) * (size_t) capacity);
+  char **steps = (char**) malloc(sizeof(char*) * ((size_t) capacity));
   if (steps == NULL) {
     return NULL;
   }
+
   int count = 0;
+
   numScripts = 0;
+
   for (int ii = 0; ii < numArgs; ii++) {
     if ((args[ii][0] != '@') || (numScripts == 4)) {
       steps[count++] = args[ii];
       continue;
     }
+
     char *word = scripts[numScripts++];
     while (*(word += strspn(word, " \t\r\n")) != '\0') {
       steps[count++] = word;
       word += strcspn(word, " \t\r\n");
+
       if (*word != '\0') {
         *word++ = '\0';
       }
     }
   }
+
   *numSteps = count;
+
   return steps;
 }
 
@@ -186,6 +207,7 @@ int main(int argc, char **argv) {
   } else if ((argc > 2) && (strcmp(argv[1], "do") == 0)) {
     StepsArgs stepsArgs = { .numSteps = 0, .steps = NULL, .status = 1 };
     char *scripts[4] = { NULL };
+
     stepsArgs.steps = expandSteps(argc - 2, &argv[2], scripts,
       &stepsArgs.numSteps);
     if ((stepsArgs.steps == NULL)
@@ -194,14 +216,18 @@ int main(int argc, char **argv) {
     ) {
       stepsArgs.status = 1;
     }
+
     free(stepsArgs.steps);
-    for (size_t ii = 0; ii < sizeof(scripts) / sizeof(scripts[0]); ii++) {
+
+    for (size_t ii = 0; ii < (sizeof(scripts) / sizeof(scripts[0])); ii++) {
       free(scripts[ii]);
     }
+
     return stepsArgs.status;
   }
 
   fprintf(stderr,
     "Usage: gfxprobe find|send|all|fonts|do <step>|@<file>...\n");
+
   return 2;
 }

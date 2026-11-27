@@ -95,7 +95,9 @@ static void waitForever(void) {
     if (processMessage == NULL) {
       continue;
     }
+
     processMessageSetDone(processMessage);
+
     if (processMessageWaiting(processMessage) == false) {
       processMessageRelease(processMessage);
     }
@@ -112,6 +114,7 @@ static void waitForever(void) {
 static void* idleProgram(void *args) {
   (void) args;
   waitForever();
+
   return NULL;
 }
 
@@ -128,11 +131,14 @@ static void* spawner(void *args) {
   posix_spawnattr_t attr = { .flags = _spawnFlags };
   pid_t pid = 0;
   char *argv[] = { "app", NULL };
+
   if (nanoOsSpawn(&pid, "/usr/bin/app", NULL, &attr, argv, NULL) != 0) {
     pid = 0;
   }
+
   _spawnedPid = pid;
   waitForever();
+
   return NULL;
 }
 
@@ -147,6 +153,7 @@ static void* shutdownSender(void *args) {
   (void) args;
   _shutdownResult = nanoOsHardwareShutdown(NANO_OS_SHUTDOWN_RESET);
   waitForever();
+
   return NULL;
 }
 
@@ -182,6 +189,7 @@ static ProcessDescriptor* startProcess(void* (*function)(void*),
   ) {
     return NULL;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->privilegeLevel = privilegeLevel;
   processDescriptor->userId = userId;
@@ -190,6 +198,7 @@ static ProcessDescriptor* startProcess(void* (*function)(void*),
   processDescriptor->ipcCapabilitiesDynamic = false;
   processDescriptor->readyQueue = halMockReadyQueue(privilegeLevel);
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
+
   return processDescriptor;
 }
 
@@ -204,17 +213,21 @@ static ProcessDescriptor* startProcess(void* (*function)(void*),
 static ProcessDescriptor* spawnFromExecutive(short flags) {
   _spawnFlags = flags;
   _spawnedPid = -1;
+
   if (startProcess(spawner, PRIVILEGE_LEVEL_EXECUTIVE, APP_USER_ID,
       baseSupervisorIpcCapabilities) == NULL
   ) {
     return NULL;
   }
+
   for (int ii = 0; (ii < MAX_YIELDS) && (_spawnedPid == -1); ii++) {
     processYield();
   }
+
   if (_spawnedPid <= 0) {
     return NULL;
   }
+
   return &allProcesses[_spawnedPid - 1];
 }
 
@@ -239,14 +252,17 @@ static int sendShutdownAs(UserId userId) {
   halMockSetPowerHook(countPowerMode);
   _numPowerModesEntered = 0;
   _shutdownResult = 1;
+
   if (startProcess(shutdownSender, PRIVILEGE_LEVEL_SUPERVISOR, userId,
       baseSupervisorIpcCapabilities) == NULL
   ) {
     return 1;
   }
+
   for (int ii = 0; (ii < MAX_YIELDS) && (_shutdownResult == 1); ii++) {
     processYield();
   }
+
   return _shutdownResult;
 }
 
@@ -272,11 +288,14 @@ NANO_OS_KERNEL_TEST_WITH(app_level, an_allowed_app_gets_only_spawn_added,
   NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_USER, app->privilegeLevel);
   NANO_OS_ASSERT_EQ_INT(APP_USER_ID, app->userId);
   NANO_OS_ASSERT_EQ_INT(NUM_BASE_IPC_CAPABILITIES, app->numIpcCapabilities);
+
   for (int ii = 0; ii < NUM_BASE_IPC_CAPABILITIES; ii++) {
     uint32_t expected = baseUserIpcCapabilities[ii].messageTypes;
+
     if (baseUserIpcCapabilities[ii].destinationPid == schedulerPid) {
       expected |= ((uint32_t) 1) << SCHEDULER_SPAWN;
     }
+
     NANO_OS_ASSERT_EQ_INT(baseUserIpcCapabilities[ii].destinationPid,
       app->ipcCapabilities[ii].destinationPid);
     NANO_OS_ASSERT_TRUE(baseUserIpcCapabilities[ii].signature

@@ -61,5 +61,6 @@ void* wmUsage(void *args) {
     "  --finish  Wait until each frame is drawn before going on.\n"
     "  --help  Show this help and exit.\n",
     stream);
+
   return args;
 }

@@ -109,16 +109,20 @@ static volatile int execStatus;
 /// @return This function never returns.
 static void* fakeDriver(void *args) {
   (void) args;
+
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
     if (processMessage == NULL) {
       continue;
     }
+
     processMessageSetDone(processMessage);
+
     if (processMessageWaiting(processMessage) == false) {
       processMessageRelease(processMessage);
     }
   }
+
   return NULL;
 }
 
@@ -136,12 +140,15 @@ static int windowServerCommand(SchedulerCommand command, ProcessId *pid) {
   SchedulerWindowServerArgs args = { .errorNumber = -1, .pid = 0 };
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | command, &args, sizeof(args), true);
+
   if (processMessage == NULL) {
     return -1;
   }
+
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
   *pid = args.pid;
+
   return args.errorNumber;
 }
 
@@ -164,9 +171,12 @@ static void serve(void) {
         endedPids[endedCount]
           = (ProcessId) (uintptr_t) processMessageData(processMessage);
       }
+
       endedCount++;
     }
+
     processMessageSetDone(processMessage);
+
     if (processMessageWaiting(processMessage) == false) {
       processMessageRelease(processMessage);
     }
@@ -199,10 +209,13 @@ static void* program(void *args) {
     while (!go) {
       processYield();
     }
+
     int result = windowServerCommand(SCHEDULER_CONNECT_WINDOW_SERVER, &pid);
+
     connectPids[slot] = pid;
     capabilityCounts[slot] = getRunningProcess()->numIpcCapabilities;
     connectResults[slot] = result;
+
     if (strcmp(mode, "twice") == 0) {
       secondConnectResults[slot]
         = windowServerCommand(SCHEDULER_CONNECT_WINDOW_SERVER, &pid);
@@ -215,9 +228,11 @@ static void* program(void *args) {
       execStatus = schedulerExecve(OTHER_PATH, argv, NULL);
     }
   }
+
   while (1) {
     processYield();
   }
+
   return NULL;
 }
 
@@ -240,6 +255,7 @@ static void windowServerPreBoot(void) {
 static void resetResults(void) {
   endedCount = 0;
   go = false;
+
   for (int ii = 0; ii < NUM_SLOTS; ii++) {
     registerResults[ii] = NO_RESULT;
     connectResults[ii] = NO_RESULT;
@@ -259,16 +275,20 @@ static ProcessDescriptor* startDriver(void) {
   resetResults();
   ProcessId pid = schedulerGetFirstShellPid() + schedulerGetNumShells();
   ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+
   processQueueRemove(halMockFreeQueue(), processDescriptor);
+
   if (processCreate(processDescriptor, fakeDriver, NULL) != processSuccess) {
     return NULL;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->readyQueue
     = halMockReadyQueue(PRIVILEGE_LEVEL_EXECUTIVE);
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
+
   return processDescriptor;
 }
 
@@ -291,9 +311,11 @@ static ProcessDescriptor* spawn(const char *path, char *mode, char *slot,
   posix_spawnattr_t attr = { .flags = system ? POSIX_SPAWN_SYSTEM : 0 };
   pid_t pid = 0;
   char *argv[] = { mode, slot, NULL };
+
   if (nanoOsSpawn(&pid, path, NULL, &attr, argv, NULL) != 0) {
     return NULL;
   }
+
   return &allProcesses[pid - 1];
 }
 
@@ -334,11 +356,14 @@ static ProcessDescriptor* startServer(void) {
   if (startDriver() == NULL) {
     return NULL;
   }
+
   ProcessDescriptor *server = spawn(SERVER_NAME, "server", "0", true);
   if (server == NULL) {
     return NULL;
   }
+
   waitForResult(&registerResults[0]);
+
   return (registerResults[0] == 0) ? server : NULL;
 }
 
@@ -358,6 +383,7 @@ static uint32_t grantedTypes(ProcessDescriptor *from, ProcessId to) {
       return from->ipcCapabilities[ii].messageTypes;
     }
   }
+
   return 0;
 }
 
@@ -375,10 +401,12 @@ static int killPid(ProcessId pid) {
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &args, sizeof(args), true);
+
   if (processMessage != NULL) {
     processMessageWaitForDone(processMessage, NULL);
     processMessageRelease(processMessage);
   }
+
   return args.returnValue;
 }
 
@@ -396,11 +424,14 @@ static ProcessDescriptor* connectClient(const char *mode, int slot) {
   static char *slotNames[NUM_SLOTS] = { "0", "1", "2" };
   ProcessDescriptor *client
     = spawn(APP_PATH, (char*) mode, slotNames[slot], false);
+
   if (client == NULL) {
     return NULL;
   }
+
   go = true;
   waitForResult(&connectResults[slot]);
+
   return client;
 }
 
@@ -522,6 +553,7 @@ NANO_OS_KERNEL_TEST_WITH(window_server, an_exiting_client_is_reported_once,
   ProcessDescriptor *client = connectClient("exit", 0);
   NANO_OS_ASSERT_NOT_NULL(client);
   ProcessId pid = client->processId;
+
   NANO_OS_ASSERT_EQ_INT(0, connectResults[0]);
 
   assertEndedOnce(server, client, pid);
@@ -563,6 +595,7 @@ NANO_OS_KERNEL_TEST_WITH(window_server, a_client_execing_another_program_is_repo
   ProcessDescriptor *client = spawn(APP_PATH, "exec", "0", false);
   NANO_OS_ASSERT_NOT_NULL(client);
   ProcessId pid = client->processId;
+
   NANO_OS_ASSERT_EQ_INT(0, addProcessIpcCapability(client, schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_EXECVE));
   execStatus = 1;
@@ -597,12 +630,14 @@ NANO_OS_KERNEL_TEST_WITH(window_server, the_window_server_ending_revokes_every_c
   NANO_OS_ASSERT_NOT_NULL(server);
   ProcessId serverPid = server->processId;
   ProcessDescriptor *first = connectClient("connect", 0);
+
   NANO_OS_ASSERT_NOT_NULL(first);
   ProcessDescriptor *second = connectClient("connect", 1);
   NANO_OS_ASSERT_NOT_NULL(second);
   NANO_OS_ASSERT_TRUE(first->windowClient && second->windowClient);
 
   NANO_OS_ASSERT_EQ_INT(0, killPid(serverPid));
+
   for (int ii = 0; (ii < MAX_YIELDS) && first->windowClient; ii++) {
     processYield();
   }

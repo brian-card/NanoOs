@@ -53,9 +53,11 @@ static GfxCmdBuf* recordFile(GfxDisplay *disp, const char *path,
 ) {
   size_t size = 0;
   uint8_t *data = (uint8_t*) readFile(path, &size);
+
   if (data == NULL) {
     return NULL;
   }
+
   GfxCmdBuf *buf = gfxCmdBufCreate(disp, (size > 0) ? size : 1);
   if (buf != NULL) {
     gfxCmdBufBegin(buf, flags);
@@ -64,7 +66,9 @@ static GfxCmdBuf* recordFile(GfxDisplay *disp, const char *path,
       memcpy(record, data, size);
     }
   }
+
   free(data);
+
   return buf;
 }
 
@@ -83,14 +87,19 @@ static GfxError submitFile(GfxDisplay *disp, const char *path) {
   if (buf == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   GfxError status = gfxSubmit(buf);
+
   // gfxSubmit switched buffers; settling the one it sent folds in its status.
   gfxCmdBufSlot_(buf, buf->submitArgs[buf->writeIdx ^ 1], buf->writeIdx ^ 1,
     false);
+
   if (status == GFX_OK) {
     status = (GfxError) buf->error;
   }
+
   gfxCmdBufDestroy(buf);
+
   return status;
 }
 
@@ -112,8 +121,11 @@ static GfxError preloadFile(GfxDisplay *disp, const char *path,
   if (buf == NULL) {
     return GFX_ERR_OUT_OF_MEMORY;
   }
+
   GfxError status = gfxPreupload(buf, handle);
+
   gfxCmdBufDestroy(buf);
+
   return status;
 }
 
@@ -131,6 +143,7 @@ void* gfxprobePaint(void *args) {
   GfxDisplay *disp = paintArgs->disp;
   char **words = paintArgs->words;
   GfxHandle handle = GFX_INVALID_HANDLE;
+
   if (paintArgs->numWords < 2) {
     return args;
   } else if (strcmp(words[0], "submit") == 0) {
@@ -142,5 +155,6 @@ void* gfxprobePaint(void *args) {
       (unsigned int) handle);
     paintArgs->consumed = 2;
   }
+
   return args;
 }

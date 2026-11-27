@@ -175,14 +175,14 @@ _Static_assert(
   "GfxKey's named keys must follow the VDP's keycodes");
 _Static_assert((KEYCODE_KEYPAD_INSERT == KEYCODE_INSERT + 1)
   && (KEYCODE_KEYPAD_DELETE == KEYCODE_DELETE + 1)
-  && (KEYCODE_KEYPAD_HOME == KEYCODE_HOME + 1)
-  && (KEYCODE_KEYPAD_END == KEYCODE_END + 1)
-  && (KEYCODE_KEYPAD_PAGEUP == KEYCODE_PAGEUP + 1)
-  && (KEYCODE_KEYPAD_PAGEDOWN == KEYCODE_PAGEDOWN + 1)
-  && (KEYCODE_KEYPAD_UP == KEYCODE_UP + 1)
-  && (KEYCODE_KEYPAD_DOWN == KEYCODE_DOWN + 1)
-  && (KEYCODE_KEYPAD_LEFT == KEYCODE_LEFT + 1)
-  && (KEYCODE_KEYPAD_RIGHT == KEYCODE_RIGHT + 1),
+  && (KEYCODE_KEYPAD_HOME == (KEYCODE_HOME + 1))
+  && (KEYCODE_KEYPAD_END == (KEYCODE_END + 1))
+  && (KEYCODE_KEYPAD_PAGEUP == (KEYCODE_PAGEUP + 1))
+  && (KEYCODE_KEYPAD_PAGEDOWN == (KEYCODE_PAGEDOWN + 1))
+  && (KEYCODE_KEYPAD_UP == (KEYCODE_UP + 1))
+  && (KEYCODE_KEYPAD_DOWN == (KEYCODE_DOWN + 1))
+  && (KEYCODE_KEYPAD_LEFT == (KEYCODE_LEFT + 1))
+  && (KEYCODE_KEYPAD_RIGHT == (KEYCODE_RIGHT + 1)),
   "vdpGfxKey takes a keypad navigation key's main key to be one below it");
 _Static_assert((GFX_MOD_CTRL == AGON_KEYMOD_CTRL)
   && (GFX_MOD_SHIFT == AGON_KEYMOD_SHIFT)
@@ -209,17 +209,20 @@ _Static_assert((GFX_MOD_CTRL == AGON_KEYMOD_CTRL)
 /// @return Returns the GfxKey.
 uint8_t vdpGfxKey(const uint8_t *keyData, bool numLock, uint8_t *ascii) {
   uint8_t keycode = keyData[2];
+
   *ascii = keyData[0];
   int keypadIndex = vdpKeypadIndex(keycode);
   if (keypadIndex >= 0) {
     *ascii = 0;
+
     if (numLock && ((keyData[1] & AGON_KEYMOD_SHIFT) == 0)) {
       *ascii = (uint8_t) "0123456789."[keypadIndex];
       return *ascii;
     }
+
     // Every keypad navigation key's keycode is one above its main key's.
     keycode = _vdpKeypadNavigation[keypadIndex] - 1;
-    if (keycode == KEYCODE_KEYPAD_CENTER - 1) {
+    if (keycode == (KEYCODE_KEYPAD_CENTER - 1)) {
       return GFX_KEY_NONE;
     }
   } else if (keycode == KEYCODE_KEYPAD_ENTER) {
@@ -230,12 +233,15 @@ uint8_t vdpGfxKey(const uint8_t *keyData, bool numLock, uint8_t *ascii) {
     if (keycode > KEYCODE_F12) {
       return GFX_KEY_NONE;
     }
+
     return (uint8_t) (keycode - KEYCODE_LSHIFT + GFX_KEY_LEFT_SHIFT);
   } else if ((keycode >= KEYCODE_a) && (keycode <= KEYCODE_Z)) {
     keycode -= KEYCODE_a;
+
     if (keycode >= 26) {
       keycode -= 26;
     }
+
     return (uint8_t) ('a' + keycode);
   } else if ((keycode >= KEYCODE_0) && (keycode <= KEYCODE_9)) {
     return (uint8_t) ('0' + keycode - KEYCODE_0);
@@ -284,7 +290,9 @@ size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output) {
 
   uint8_t ascii = 0;
   uint8_t key = vdpGfxKey(keyData, numLock, &ascii);
+
   output[0] = '\x1b';
+
   if ((key >= GFX_KEY_F1) && (key <= GFX_KEY_F4)) {
     output[1] = 'O';
     output[2] = (uint8_t) ('P' + key - GFX_KEY_F1);
@@ -292,15 +300,19 @@ size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output) {
   }
 
   uint8_t end = 0;
+
   if ((key >= GFX_KEY_INSERT) && (key <= GFX_KEY_RIGHT)) {
     end = _vdpKeySequenceEnds[key - GFX_KEY_INSERT];
   }
+
   if (end != 0) {
     output[1] = '[';
     output[2] = end;
+
     if (end >= 'A') {
       return 3;
     }
+
     output[3] = '~';
     return 4;
   } else if (ascii != 0) {

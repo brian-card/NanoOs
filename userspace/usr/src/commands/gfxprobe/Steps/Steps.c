@@ -49,11 +49,15 @@ static void holdUntilRevoked(void) {
     if (message == NULL) {
       continue;
     }
+
     int64_t type = processMessageType(message);
+
     processMessageSetDone(message);
+
     if (processMessageWaiting(message) == false) {
       processMessageRelease(message);
     }
+
     if (type == (GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED)) {
       printf("gfxprobe: revoked\n");
       return;
@@ -78,8 +82,10 @@ static int runSteps(int numSteps, char **steps) {
   if (connectDriver(&disp) != 0) {
     return 1;
   }
+
   GfxFontDesc font;
   void *bitmap = probeFont(&font);
+
   if (bitmap == NULL) {
     printf("gfxprobe: no memory\n");
     return 1;
@@ -87,10 +93,13 @@ static int runSteps(int numSteps, char **steps) {
 
   int returnValue = 0;
   struct timespec mark;
+
   timespec_get(&mark, TIME_UTC);
+
   for (int ii = 0; ii < numSteps; ii++) {
     const char *step = steps[ii];
-    const char *argument = (ii + 1 < numSteps) ? steps[ii + 1] : "";
+    const char *argument = ((ii + 1) < numSteps) ? steps[ii + 1] : "";
+
     if (strcmp(step, "open") == 0) {
       GfxError status = gfxOpenDisplay(&disp, GFX_DRIVER_PROCESS_NAME,
         640, 480);
@@ -107,6 +116,7 @@ static int runSteps(int numSteps, char **steps) {
     } else if (strcmp(step, "font") == 0) {
       GfxHandle handle = GFX_INVALID_HANDLE;
       GfxError status = gfxUploadFont(&disp, &font, &handle);
+
       printf("gfxprobe: font %s 0x%x\n", gfxErrorString(status),
         (unsigned int) handle);
     } else if (strcmp(step, "hold") == 0) {
@@ -119,6 +129,7 @@ static int runSteps(int numSteps, char **steps) {
       for (int line = 0; line < count; line++) {
         printf("gfxprobe: burst %02d ................\n", line);
       }
+
       ii++;
     } else if (strcmp(step, "sleep") == 0) {
       sleep((unsigned int) strtol(argument, NULL, 10));
@@ -130,6 +141,7 @@ static int runSteps(int numSteps, char **steps) {
       };
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Paint", "gfxprobePaint",
         &paintArgs);
+
       if (paintArgs.consumed == 0) {
         callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Media", "gfxprobeMedia",
           &paintArgs);
@@ -143,11 +155,13 @@ static int runSteps(int numSteps, char **steps) {
         returnValue = 2;
         break;
       }
+
       ii += paintArgs.consumed - 1;
     }
   }
 
   free(bitmap);
+
   return returnValue;
 }
 
@@ -161,5 +175,6 @@ static int runSteps(int numSteps, char **steps) {
 void* gfxprobeSteps(void *args) {
   StepsArgs *stepsArgs = (StepsArgs*) args;
   stepsArgs->status = runSteps(stepsArgs->numSteps, stepsArgs->steps);
+
   return args;
 }

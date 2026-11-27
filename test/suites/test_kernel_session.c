@@ -105,10 +105,13 @@ static volatile ProcessId displayPid;
 static int tryOpen(ProcessId display) {
   uint8_t port = 0;
   uint8_t shell = 0;
+
   errno = 0;
+
   if (nanoOsWindowServerOpenSession(24, 80, display, &port, &shell) == 0) {
     return 0;
   }
+
   return errno;
 }
 
@@ -155,9 +158,11 @@ static void* program(void *args) {
     reported = true;
   } else if (strcmp(mode, "server") == 0) {
     serverReady = (nanoOsWindowServerRegister() == 0);
+
     while (displayPid == 0) {
       processYield();
     }
+
     openErrnos[2] = tryOpen(displayPid);
   } else if (strcmp(mode, "intruder") == 0) {
     addProcessIpcCapability(self, schedulerPid, SCHEDULER_COMMAND_SIGNATURE,
@@ -171,9 +176,11 @@ static void* program(void *args) {
   } else if (strcmp(mode, "quit") == 0) {
     return NULL;
   }
+
   while (1) {
     processYield();
   }
+
   return NULL;
 }
 
@@ -201,12 +208,15 @@ static ProcessDescriptor* spawnProgram(char *mode) {
   stderrPid = PROCESS_ID_NOT_SET;
   pid_t pid = 0;
   char *argv[] = { mode, NULL };
+
   if (nanoOsSpawn(&pid, "/usr/bin/program", NULL, NULL, argv, NULL) != 0) {
     return NULL;
   }
-  for (int ii = 0; (ii < MAX_YIELDS) && !reported; ii++) {
+
+  for (int ii = 0; (ii < MAX_YIELDS) && (!reported); ii++) {
     processYield();
   }
+
   return reported ? &allProcesses[pid - 1] : NULL;
 }
 
@@ -215,10 +225,11 @@ NANO_OS_KERNEL_TEST_WITH(session,
   sessionPreBoot
 ) {
   ProcessDescriptor *slot = spawnProgram("login");
+
   NANO_OS_ASSERT_EQ_INT(-1, execErrno);
   NANO_OS_ASSERT_NOT_NULL(slot);
   NANO_OS_ASSERT_TRUE(slot->processId
-    >= schedulerGetFirstShellPid() + schedulerGetNumShells());
+    >= (schedulerGetFirstShellPid() + schedulerGetNumShells()));
   NANO_OS_ASSERT_NOT_NULL(recordedShellPath);
   NANO_OS_ASSERT_STR_EQ(SHELL_FULL_PATH, recordedShellPath);
 }
@@ -231,7 +242,7 @@ NANO_OS_KERNEL_TEST_WITH(session,
   ProcessDescriptor *slot = spawnProgram("exit");
   NANO_OS_ASSERT_NOT_NULL(slot);
   NANO_OS_ASSERT_TRUE(slot->processId
-    >= schedulerGetFirstShellPid() + schedulerGetNumShells());
+    >= (schedulerGetFirstShellPid() + schedulerGetNumShells()));
   NANO_OS_ASSERT_EQ_INT(outputPid, stdoutPid);
   NANO_OS_ASSERT_EQ_INT(outputPid, stderrPid);
 }
@@ -259,6 +270,7 @@ static ConsoleInputReadyArgs readyArgs[CONSOLE_NUM_PORTS];
 static void portFixture(void) {
   memset(&portState, 0, sizeof(portState));
   memset(readyArgs, 0, sizeof(readyArgs));
+
   for (int ii = 0; ii < CONSOLE_NUM_BUFFERS; ii++) {
     portState.consoleBuffers[ii].owner = PROCESS_ID_NOT_SET;
   }
@@ -286,19 +298,24 @@ static ProcessMessage* deliver(int64_t type, void *args, size_t size,
   if (sent == NULL) {
     return NULL;
   }
+
   processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | type, args, size,
     /* waiting= */ true);
+
   if (processMessageQueuePush(getRunningProcess(), sent) != processSuccess) {
     processMessageRelease(sent);
     return NULL;
   }
+
   ProcessMessage *received = processMessageQueuePop();
   if (received != sent) {
     processMessageRelease(sent);
     return NULL;
   }
+
   msg_from(received).coro = allProcesses[from - 1].mainThread;
   handler(&portState, received);
+
   return sent;
 }
 
@@ -321,7 +338,9 @@ static int addSessionPort(ProcessId inputPid, ProcessId outputPid) {
   if (sent == NULL) {
     return -1;
   }
+
   processMessageRelease(sent);
+
   return (portArgs.returnValue == 0) ? portArgs.portId : -1;
 }
 
@@ -339,8 +358,11 @@ static bool removePort(uint8_t portId, ProcessId from) {
   if (sent == NULL) {
     return false;
   }
+
   bool done = processMessageDone(sent);
+
   processMessageRelease(sent);
+
   return done;
 }
 
@@ -353,10 +375,13 @@ static int numPorts(void) {
   ConsoleGetNumPortsArgs args = { .numPorts = -1 };
   ProcessMessage *sent = deliver(CONSOLE_GET_NUM_PORTS, &args, sizeof(args),
     getRunningPid(), consoleGetNumPortsCommandHandler);
+
   if (sent == NULL) {
     return -1;
   }
+
   processMessageRelease(sent);
+
   return args.numPorts;
 }
 
@@ -375,6 +400,7 @@ static ProcessMessage* sendByte(uint8_t portId, ProcessId from, char byte) {
   readyArgs[portId].portId = portId;
   readyArgs[portId].numBytes = 1;
   readyArgs[portId].bytes[0] = (uint8_t) byte;
+
   return deliver(CONSOLE_INPUT_READY, &readyArgs[portId],
     sizeof(readyArgs[portId]), from, consoleInputReadyCommandHandler);
 }
@@ -388,6 +414,7 @@ static ProcessMessage* sendByte(uint8_t portId, ProcessId from, char byte) {
 /// @return Returns the byte, or -1 if there was none.
 static int readPort(uint8_t portId) {
   ConsolePort *consolePort = &portState.consolePorts[portId];
+
   return consolePort->readByte(consolePort);
 }
 
@@ -414,6 +441,7 @@ NANO_OS_KERNEL_TEST(session, a_removed_port_index_is_reused) {
   const char bytes[] = { 'a', 'd', 'c' };
   const ProcessId servicers[] = {
     FIRST_SERVICER, FIRST_SERVICER + 3, FIRST_SERVICER + 2 };
+
   for (uint8_t ii = 0; ii < 3; ii++) {
     ProcessMessage *sent = sendByte(ii, servicers[ii], bytes[ii]);
     NANO_OS_ASSERT_NOT_NULL(sent);
@@ -521,7 +549,9 @@ static void recordForward(int servicer, ProcessMessage *message) {
     strncat(forwardedTo[servicer], (const char*) processMessageData(message),
       sizeof(forwardedTo[servicer]) - used - 1);
   }
+
   processMessageSetDone(message);
+
   if (processMessageWaiting(message) == false) {
     processMessageRelease(message);
   }
@@ -541,16 +571,21 @@ static int trySend(ConsoleCommand command, void *args, size_t size) {
   if (message == NULL) {
     return ENOMEM;
   }
+
   processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | command, args,
     size, /* waiting= */ true);
   errno = 0;
+
   if (sendProcessMessageToPid(consolePid, message) != processSuccess) {
     int sendErrno = errno;
+
     processMessageRelease(message);
     return sendErrno;
   }
+
   processMessageWaitForDone(message, NULL);
   processMessageRelease(message);
+
   return 0;
 }
 
@@ -564,10 +599,12 @@ static int trySend(ConsoleCommand command, void *args, size_t size) {
 /// @return This function never returns.
 static void* inputServicer(void *args) {
   (void) args;
+
   if (queryWinsize) {
     while (refusalsTried == false) {
       processYield();
     }
+
     static ConsoleWinsizeArgs winsizeArgs;
     if (trySend(CONSOLE_GET_WINSIZE, &winsizeArgs, sizeof(winsizeArgs)) == 0) {
       portRows = winsizeArgs.rows;
@@ -583,15 +620,19 @@ static void* inputServicer(void *args) {
       processMessageInit(message,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY, &inputArgs,
         sizeof(inputArgs), /* waiting= */ false);
+
       if (sendProcessMessageToPid(consolePid, message) != processSuccess) {
         processMessageRelease(message);
       }
     }
   }
+
   inputSent = true;
+
   while (1) {
     recordForward(0, processMessageQueueWait(NULL));
   }
+
   return NULL;
 }
 
@@ -607,6 +648,7 @@ static void* outputServicer(void *args) {
   (void) args;
   static ConsoleInputReadyArgs inputArgs;
   static ConsoleWinsizeArgs winsizeArgs;
+
   inputArgs.portId = (uint8_t) splitPortId;
   inputArgs.numBytes = 1;
   inputArgs.bytes[0] = 'z';
@@ -617,9 +659,11 @@ static void* outputServicer(void *args) {
   refusedErrnos[1]
     = trySend(CONSOLE_SET_WINSIZE, &winsizeArgs, sizeof(winsizeArgs));
   refusalsTried = true;
+
   while (1) {
     recordForward(1, processMessageQueueWait(NULL));
   }
+
   return NULL;
 }
 
@@ -652,6 +696,7 @@ static void* typingInputServicer(void *args) {
   (void) args;
   static ConsoleInputReadyArgs inputArgs;
   ProcessMessage *message = NULL;
+
   while (1) {
     if ((typed == '\0')
       || ((message != NULL) && (processMessageDone(message) == false))
@@ -662,21 +707,26 @@ static void* typingInputServicer(void *args) {
     if (message != NULL) {
       processMessageRelease(message);
     }
+
     message = getAvailableMessage();
     if (message == NULL) {
       continue;
     }
+
     inputArgs.portId = (uint8_t) splitPortId;
     inputArgs.numBytes = 1;
     inputArgs.bytes[0] = (uint8_t) typed;
     processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
       &inputArgs, sizeof(inputArgs), /* waiting= */ true);
+
     if (sendProcessMessageToPid(consolePid, message) != processSuccess) {
       processMessageRelease(message);
       message = NULL;
     }
+
     typed = '\0';
   }
+
   return NULL;
 }
 
@@ -691,13 +741,16 @@ static void* typingInputServicer(void *args) {
 /// @return This function never returns.
 static void* stalledOutputServicer(void *args) {
   (void) args;
+
   while (outputStalled) {
     mockClockAdvanceNs(10000000ULL);
     processYield();
   }
+
   while (1) {
     recordForward(1, processMessageQueueWait(NULL));
   }
+
   return NULL;
 }
 
@@ -712,21 +765,27 @@ static void* stalledOutputServicer(void *args) {
 /// @return Returns 0 on success, -ENOMEM on failure.
 static int startServicer(ProcessDescriptor *processDescriptor) {
   void* (*body)(void*) = outputServicer;
+
   if (stallOutput) {
     body = stalledOutputServicer;
   }
+
   if (processDescriptor->processId == inputPid) {
     body = inputServicer;
+
     if (stallOutput) {
       body = typingInputServicer;
     }
   }
+
   if (processCreate(processDescriptor, body, NULL) != processSuccess) {
     return -ENOMEM;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->restartFunction = NULL;
+
   return 0;
 }
 
@@ -743,6 +802,7 @@ static int addSplitPort(void) {
   allProcesses[inputPid - 1].restartFunction = startServicer;
   allProcesses[outputPid - 1].restartFunction = startServicer;
   splitPortId = schedulerAddForwardingPort(inputPid, outputPid, 0, 0);
+
   return (splitPortId >= 0) ? 0 : splitPortId;
 }
 
@@ -771,14 +831,17 @@ NANO_OS_KERNEL_TEST_WITH(session,
   a_split_port_echoes_to_its_output_servicer_only, splitPreBoot
 ) {
   NANO_OS_ASSERT_TRUE(splitPortId >= 0);
+
   for (int ii = 0; (ii < MAX_YIELDS)
     && ((inputSent == false) || (forwardedTo[1][0] == '\0')); ii++
   ) {
     processYield();
   }
+
   for (int ii = 0; ii < 100; ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_STR_EQ("a", forwardedTo[1]);
   NANO_OS_ASSERT_STR_EQ("", forwardedTo[0]);
 }
@@ -787,9 +850,11 @@ NANO_OS_KERNEL_TEST_WITH(session,
   the_output_servicer_cannot_send_a_split_port_input, splitQueryPreBoot
 ) {
   NANO_OS_ASSERT_TRUE(splitPortId >= 0);
+
   for (int ii = 0; (ii < MAX_YIELDS) && (portRows < 0); ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_TRUE(refusalsTried);
   NANO_OS_ASSERT_EQ_INT(EPERM, refusedErrnos[0]);
   NANO_OS_ASSERT_EQ_INT(EPERM, refusedErrnos[1]);
@@ -828,13 +893,17 @@ static int numPortsBy(int seconds) {
   if (message == NULL) {
     return -1;
   }
+
   struct timespec deadline;
   timespec_get(&deadline, TIME_UTC);
   deadline.tv_sec += seconds;
+
   if (processMessageWaitForDone(message, &deadline) != processSuccess) {
     return -1;
   }
+
   processMessageRelease(message);
+
   return args.numPorts;
 }
 
@@ -851,6 +920,7 @@ static void typeAndSettle(char byte) {
   for (int ii = 0; (ii < MAX_YIELDS) && (typed != '\0'); ii++) {
     processYield();
   }
+
   for (int ii = 0; ii < 100; ii++) {
     processYield();
   }
@@ -864,13 +934,17 @@ NANO_OS_KERNEL_TEST_WITH(session,
   NANO_OS_ASSERT_TRUE(numPortsBy(5) > 0);
   typeAndSettle('c');
   outputStalled = false;
+
   for (int ii = 0; (ii < MAX_YIELDS) && (forwardedTo[1][0] == '\0'); ii++) {
     processYield();
   }
+
   typeAndSettle('b');
+
   for (int ii = 0; (ii < MAX_YIELDS) && (strlen(forwardedTo[1]) < 2); ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_STR_EQ("ab", forwardedTo[1]);
 }
 
@@ -913,19 +987,26 @@ static void* stalledDriver(void *args) {
   if (typed != NULL) {
     processMessageInit(typed, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
       &inputArgs, sizeof(inputArgs), /* waiting= */ true);
+
     if (sendProcessMessageToPid(consolePid, typed) != processSuccess) {
       processMessageRelease(typed);
     }
   }
+
   ProcessMessage *echo = processMessageQueueWait(NULL);
+
   echoHeld = true;
+
   while (driverStalled) {
     processYield();
   }
+
   recordForward(0, echo);
+
   while (1) {
     recordForward(0, processMessageQueueWait(NULL));
   }
+
   return NULL;
 }
 
@@ -942,9 +1023,11 @@ static int startDriver(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, stalledDriver, NULL) != processSuccess) {
     return -ENOMEM;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->restartFunction = NULL;
+
   return 0;
 }
 
@@ -959,6 +1042,7 @@ static int addDriverPort(void) {
   allProcesses[driverPid - 1].restartFunction = startDriver;
   driverPortId = schedulerAddForwardingPort(driverPid, PROCESS_ID_NOT_SET,
     0, 0);
+
   return (driverPortId >= 0) ? 0 : driverPortId;
 }
 
@@ -977,29 +1061,36 @@ NANO_OS_KERNEL_TEST_WITH(session,
   an_exit_while_a_driver_is_slow_to_draw_an_echo_doesnt_hang, driverPreBoot
 ) {
   NANO_OS_ASSERT_TRUE(driverPortId >= 0);
-  for (int ii = 0; (ii < MAX_YIELDS) && !echoHeld; ii++) {
+
+  for (int ii = 0; (ii < MAX_YIELDS) && (!echoHeld); ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_TRUE(echoHeld);
   // A hang here never comes back to this process, so it ends the test.
   alarm(10);
   mockClockSetStepNs(100000ULL);
   pid_t pid = 0;
   char *argv[] = { "quit", NULL };
+
   NANO_OS_ASSERT_EQ_INT(0,
     nanoOsSpawn(&pid, "/usr/bin/program", NULL, NULL, argv, NULL));
+
   for (int ii = 0; (ii < MAX_YIELDS) && processRunning(&allProcesses[pid - 1]);
     ii++
   ) {
     processYield();
   }
+
   NANO_OS_ASSERT_FALSE(processRunning(&allProcesses[pid - 1]));
   NANO_OS_ASSERT_TRUE(numPortsBy(5) > 0);
   alarm(0);
   driverStalled = false;
+
   for (int ii = 0; (ii < MAX_YIELDS) && (forwardedTo[0][0] == '\0'); ii++) {
     processYield();
   }
+
   NANO_OS_ASSERT_STR_EQ("x", forwardedTo[0]);
 }
 
@@ -1018,16 +1109,20 @@ NANO_OS_KERNEL_TEST_WITH(session,
 /// @return This function never returns.
 static void* fakeDriver(void *args) {
   (void) args;
+
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
     if (processMessage == NULL) {
       continue;
     }
+
     processMessageSetDone(processMessage);
+
     if (processMessageWaiting(processMessage) == false) {
       processMessageRelease(processMessage);
     }
   }
+
   return NULL;
 }
 
@@ -1053,10 +1148,13 @@ static bool startServer(void) {
   getRunningProcess()->shellPath = (char*) SHELL_FULL_PATH;
   ProcessId pid = schedulerGetFirstShellPid() + schedulerGetNumShells();
   ProcessDescriptor *driver = &allProcesses[pid - 1];
+
   processQueueRemove(halMockFreeQueue(), driver);
+
   if (processCreate(driver, fakeDriver, NULL) != processSuccess) {
     return false;
   }
+
   threadSetContext(driver->mainThread, driver);
   driver->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   driver->userId = SYSTEM_USER_ID;
@@ -1066,14 +1164,17 @@ static bool startServer(void) {
   posix_spawnattr_t attr = { .flags = POSIX_SPAWN_SYSTEM };
   pid_t serverPid = 0;
   char *argv[] = { "server", NULL };
+
   if (nanoOsSpawn(&serverPid, "sessionserver", NULL, &attr, argv, NULL)
     != 0
   ) {
     return false;
   }
+
   for (int ii = 0; (ii < MAX_YIELDS) && (serverReady == false); ii++) {
     processYield();
   }
+
   return serverReady;
 }
 
@@ -1089,11 +1190,14 @@ static int numConsolePorts(void) {
   ProcessMessage *message = initSendProcessMessageToPid(consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS, &args, sizeof(args),
     true);
+
   if (message == NULL) {
     return -1;
   }
+
   processMessageWaitForDone(message, NULL);
   processMessageRelease(message);
+
   return args.numPorts;
 }
 
@@ -1123,6 +1227,7 @@ NANO_OS_KERNEL_TEST_WITH(session, only_the_window_server_opens_a_session,
   posix_spawnattr_t attr = { .flags = POSIX_SPAWN_SYSTEM };
   pid_t pid = 0;
   char *intruderArgv[] = { "intruder", NULL };
+
   NANO_OS_ASSERT_EQ_INT(0,
     nanoOsSpawn(&pid, "intruder", NULL, &attr, intruderArgv, NULL));
   waitForOpen(0);
@@ -1134,6 +1239,7 @@ NANO_OS_KERNEL_TEST_WITH(session, only_the_window_server_opens_a_session,
   NANO_OS_ASSERT_EQ_INT(EPERM, openErrnos[0]);
   NANO_OS_ASSERT_EQ_INT(EPERM, openErrnos[1]);
   NANO_OS_ASSERT_EQ_INT(portsBefore, numConsolePorts());
+
   for (ProcessId ii = 1; ii <= numProcesses; ii++) {
     NANO_OS_ASSERT_TRUE(allProcesses[ii - 1].shellSlot != SHELL_SLOT_SESSION);
   }
@@ -1145,6 +1251,7 @@ NANO_OS_KERNEL_TEST_WITH(session, a_display_of_another_user_is_refused,
   NANO_OS_ASSERT_TRUE(startServer());
   int portsBefore = numConsolePorts();
   ProcessDescriptor *display = spawnProgram("display");
+
   NANO_OS_ASSERT_NOT_NULL(display);
   displayPid = display->processId;
   waitForOpen(2);
@@ -1167,6 +1274,7 @@ static volatile int lastSlotStatus = -1;
 static int setLastSlotAsShell(void) {
   lastSlotStatus = schedulerSetPortShell(0, numProcesses);
   schedulerSetPortShell(0, schedulerGetFirstShellPid());
+
   return 0;
 }
 

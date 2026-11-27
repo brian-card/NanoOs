@@ -205,11 +205,12 @@ NANO_OS_TEST(unit_vdp_keyboard, every_sequence_key_sends_exactly_its_sequence) {
   };
   uint8_t output[VDP_KEY_MAX_BYTES];
 
-  for (size_t ii = 0; ii < sizeof(keys) / sizeof(keys[0]); ii++) {
+  for (size_t ii = 0; ii < (sizeof(keys) / sizeof(keys[0])); ii++) {
     size_t length = strlen(keys[ii].sequence);
     NANO_OS_ASSERT_EQ_INT((int) length, key(0, keys[ii].keycode, 1, output));
     NANO_OS_ASSERT_TRUE(memcmp(output, keys[ii].sequence, length) == 0);
   }
+
   NANO_OS_ASSERT_EQ_INT(0, key(0, KEYCODE_F5, 1, output));
   NANO_OS_ASSERT_EQ_INT(0, key(0, KEYCODE_PAUSE, 1, output));
 }
@@ -230,6 +231,7 @@ static uint8_t gfxKey(uint8_t ascii, uint8_t modifiers, uint8_t keycode,
   bool numLock, uint8_t *typed
 ) {
   uint8_t keyData[4] = { ascii, modifiers, keycode, 1 };
+
   return vdpGfxKey(keyData, numLock, typed);
 }
 
@@ -298,10 +300,11 @@ NANO_OS_TEST(unit_vdp_keyboard, named_keys_name_their_gfx_key) {
   };
   uint8_t typed = 0xff;
 
-  for (size_t ii = 0; ii < sizeof(keys) / sizeof(keys[0]); ii++) {
+  for (size_t ii = 0; ii < (sizeof(keys) / sizeof(keys[0])); ii++) {
     NANO_OS_ASSERT_EQ_INT(keys[ii].key,
       gfxKey(0, 0, keys[ii].keycode, false, &typed));
   }
+
   NANO_OS_ASSERT_EQ_INT(GFX_KEY_ESCAPE,
     gfxKey(0x1b, 0, KEYCODE_ESCAPE, false, &typed));
   NANO_OS_ASSERT_EQ_INT(0x1b, typed);
@@ -602,7 +605,7 @@ NANO_OS_TEST(unit_vdp_keyboard, anything_short_of_ctrl_alt_backspace_down_is_not
     { 8, 0, KEYCODE_BACKSPACE, 1 },
     { 0, AGON_KEYMOD_CTRL | AGON_KEYMOD_ALT_LEFT, KEYCODE_DELETE, 1 },
   };
-  for (size_t ii = 0; ii < sizeof(notRelease) / sizeof(notRelease[0]); ii++) {
+  for (size_t ii = 0; ii < (sizeof(notRelease) / sizeof(notRelease[0])); ii++) {
     NANO_OS_ASSERT_FALSE(vdpIsReleaseKey(notRelease[ii]));
   }
 }
@@ -659,6 +662,7 @@ NANO_OS_TEST(unit_vdp_keyboard,
   static const uint8_t modifiers[] = { 0, AGON_KEYMOD_SHIFT,
     AGON_KEYMOD_CTRL };
   int compared = 0;
+
   for (int numLock = 0; numLock <= 1; numLock++) {
     for (int keycode = 0; keycode < 256; keycode++) {
       for (size_t ii = 0; ii < sizeof(asciis); ii++) {
@@ -672,6 +676,7 @@ NANO_OS_TEST(unit_vdp_keyboard,
           uint8_t ascii = 0;
           uint8_t key = vdpGfxKey(keyData, numLock != 0, &ascii);
           uint8_t actualLength = wmTranslateKey(key, ascii, actual);
+
           NANO_OS_ASSERT_EQ_INT((int) expectedLength, (int) actualLength);
           NANO_OS_ASSERT_TRUE(
             memcmp(expected, actual, expectedLength) == 0);
@@ -680,5 +685,6 @@ NANO_OS_TEST(unit_vdp_keyboard,
       }
     }
   }
+
   NANO_OS_ASSERT_EQ_INT(2 * 256 * 12 * 3, compared);
 }

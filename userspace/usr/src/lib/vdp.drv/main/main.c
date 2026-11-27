@@ -91,12 +91,14 @@ static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
 /// @return This function returns no value.
 static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
   const char *overlay = "Graphics";
+
   if (message != NULL) {
     uint8_t type = (uint8_t) processMessageType(message);
     if ((type == GFX_MSG_SUBMIT) || (type == GFX_MSG_PREUPLOAD)) {
       overlay = "Draw";
     }
   }
+
   vdpOutput->graphicsMessage = message;
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, "vdpGraphics",
     vdpOutput);
@@ -178,8 +180,10 @@ static bool vdpCollect(ProcessMessage **message) {
   if ((*message == NULL) || (processMessageDone(*message) == false)) {
     return false;
   }
+
   processMessageRelease(*message);
   *message = NULL;
+
   return true;
 }
 
@@ -203,12 +207,16 @@ static bool vdpSend(ProcessId pid, int64_t type, void *args, size_t size,
   if (message == NULL) {
     return false;
   }
+
   processMessageInit(message, type, args, size, /* waiting= */ true);
+
   if (sendProcessMessageToPid(pid, message) != processSuccess) {
     processMessageRelease(message);
     return false;
   }
+
   *sent = message;
+
   return true;
 }
 
@@ -235,6 +243,7 @@ static void vdpSendEvents(VdpInput *input) {
   ) {
     return;
   }
+
   input->events = input->sentEvents;
   input->events->count = 0;
   input->sentEvents = events;

@@ -901,25 +901,31 @@ WM_SHARED bool wmIntersect(const GfxRect *first, const GfxRect *second,
   int16_t top = first->y;
   int16_t right = first->x + first->w;
   int16_t bottom = first->y + first->h;
+
   if (second->x > left) {
     left = second->x;
   }
+
   if (second->y > top) {
     top = second->y;
   }
-  if (second->x + second->w < right) {
+
+  if ((second->x + second->w) < right) {
     right = second->x + second->w;
   }
-  if (second->y + second->h < bottom) {
+
+  if ((second->y + second->h) < bottom) {
     bottom = second->y + second->h;
   }
   if ((left >= right) || (top >= bottom)) {
     return false;
   }
+
   result->x = left;
   result->y = top;
   result->w = right - left;
   result->h = bottom - top;
+
   return true;
 }
 
@@ -938,6 +944,7 @@ WM_SHARED WmWindow* wmFind(WmState *state, uint8_t id) {
       return &state->windows[ii];
     }
   }
+
   return NULL;
 }
 
@@ -954,8 +961,8 @@ WM_SHARED WmWindow* wmFind(WmState *state, uint8_t id) {
 WM_SHARED bool wmContains(const GfxRect *rect, int16_t pointX,
   int16_t pointY
 ) {
-  return (pointX >= rect->x) && (pointX < rect->x + rect->w)
-    && (pointY >= rect->y) && (pointY < rect->y + rect->h);
+  return (pointX >= rect->x) && (pointX < (rect->x + rect->w))
+    && (pointY >= rect->y) && (pointY < (rect->y + rect->h));
 }
 
 /// @fn static void wmDamage(WmState *state, const GfxRect *rect)
@@ -991,7 +998,9 @@ WM_SHARED void wmDamageOwned(WmState *state, const GfxRect *rect,
   uint8_t owner
 ) {
   uint8_t index = state->numDamage;
+
   wmDamage(state, rect);
+
   if (index < state->numDamage) {
     state->damageOwner[index] = owner;
   }
@@ -1017,11 +1026,13 @@ WM_SHARED WinEvent* wmSend(WmState *state, ProcessId pid, uint8_t type,
   if ((pid == 0) || (state->numOutbox == WM_OUTBOX)) {
     return NULL;
   }
+
   WmOutgoing *outgoing = &state->outbox[state->numOutbox++];
   memset(outgoing, 0, sizeof(*outgoing));
   outgoing->pid = pid;
   outgoing->event.type = type;
   outgoing->event.window = window;
+
   return &outgoing->event;
 }
 
@@ -1043,6 +1054,7 @@ WM_SHARED void wmChanged(WmState *state, const WmWindow *window,
   const WmWidget *widget, uint16_t value
 ) {
   WinEvent *event = NULL;
+
   for (uint8_t ii = 0; ii < state->numOutbox; ii++) {
     WmOutgoing *outgoing = &state->outbox[ii];
     if ((outgoing->pid == window->owner)
@@ -1053,6 +1065,7 @@ WM_SHARED void wmChanged(WmState *state, const WmWindow *window,
       event = &outgoing->event;
     }
   }
+
   if (event == NULL) {
     event = wmSend(state, window->owner, WIN_EVENT_CHANGED, window->id);
   }
@@ -1073,14 +1086,17 @@ WM_SHARED void wmChanged(WmState *state, const WmWindow *window,
 /// @return Returns the number of items.
 WM_SHARED uint16_t wmCountItems(const char *items, uint16_t size) {
   uint16_t count = 0;
+
   for (uint16_t ii = 0; ii < size; ii++) {
     if (items[ii] == '\0') {
       count++;
     }
   }
+
   if ((size > 0) && (items[size - 1] != '\0')) {
     count++;
   }
+
   return count;
 }
 
@@ -1099,17 +1115,22 @@ WM_SHARED const char* wmItem(const WmWidget *list, uint16_t index,
 ) {
   const char *at = list->text;
   const char *end = list->text + list->itemsSize;
+
   for (; index > 0; index--) {
     while (*at != '\0') {
       at++;
     }
+
     at++;
   }
+
   const char *stop = at;
   while ((stop < end) && (*stop != '\0')) {
     stop++;
   }
+
   *length = (uint16_t) (stop - at);
+
   return at;
 }
 
@@ -1133,10 +1154,12 @@ WM_SHARED const uint8_t* wmSkipText(const uint8_t *text) {
 ///
 /// @return Returns a pointer to the item's identifier.
 WM_SHARED uint8_t* wmMenuItem(uint8_t *menu, uint8_t index) {
-  uint8_t *at = (uint8_t*) wmSkipText(menu) + 1;
+  uint8_t *at = ((uint8_t*) wmSkipText(menu)) + 1;
+
   for (; index > 0; index--) {
     at = (uint8_t*) wmSkipText(wmSkipText(at + 2));
   }
+
   return at;
 }
 
@@ -1150,9 +1173,11 @@ WM_SHARED uint8_t* wmMenuItem(uint8_t *menu, uint8_t index) {
 /// @return Returns a pointer to the menu's title length byte.
 WM_SHARED uint8_t* wmMenu(const WmWidget *bar, uint8_t index) {
   uint8_t *at = (uint8_t*) bar->text;
+
   for (; index > 0; index--) {
     at = wmMenuItem(at, *wmSkipText(at));
   }
+
   return at;
 }
 
@@ -1173,9 +1198,11 @@ WM_SHARED void wmDiscardCanvas(WmState *state, WmWidget *widget) {
   ) {
     return;
   }
+
   for (uint8_t ii = 0; ii < canvas->count; ii++) {
     gfxDiscardPreupload(&state->display, canvas->preloads[ii]);
   }
+
   canvas->count = 0;
 }
 
@@ -1202,6 +1229,7 @@ WM_SHARED void wmDiscardCanvas(WmState *state, WmWidget *widget) {
 WM_SHARED uint32_t wmNowMs(WmState *state) {
   struct timespec now;
   timespec_get(&now, TIME_UTC);
+
   return (uint32_t) (((now.tv_sec - state->started.tv_sec) * 1000L)
     + ((now.tv_nsec - state->started.tv_nsec) / 1000000L));
 }
@@ -1225,8 +1253,9 @@ WM_SHARED bool wmDoubleClick(WmState *state, const WmWindow *window,
   uint32_t now = wmNowMs(state);
   int16_t distanceX = pointX - state->lastPressAt.x;
   int16_t distanceY = pointY - state->lastPressAt.y;
+
   if ((state->lastPressWindow == window->id)
-    && (now - state->lastPressTime <= WM_DOUBLE_CLICK_MS)
+    && ((now - state->lastPressTime) <= WM_DOUBLE_CLICK_MS)
     && (distanceX <= WM_DOUBLE_CLICK_DISTANCE)
     && (distanceX >= -WM_DOUBLE_CLICK_DISTANCE)
     && (distanceY <= WM_DOUBLE_CLICK_DISTANCE)
@@ -1235,10 +1264,12 @@ WM_SHARED bool wmDoubleClick(WmState *state, const WmWindow *window,
     state->lastPressWindow = 0;
     return true;
   }
+
   state->lastPressWindow = window->id;
   state->lastPressTime = now;
   state->lastPressAt.x = pointX;
   state->lastPressAt.y = pointY;
+
   return false;
 }
 
@@ -1256,11 +1287,13 @@ WM_SHARED bool wmDoubleClick(WmState *state, const WmWindow *window,
 WM_SHARED WmWindow* wmRaise(WmState *state, WmWindow *window) {
   uint8_t index = (uint8_t) (window - state->windows);
   uint8_t top = index;
-  while ((top + 1 < state->numWindows)
+
+  while (((top + 1) < state->numWindows)
     && (state->windows[top + 1].layer == window->layer)
   ) {
     top++;
   }
+
   if (top != index) {
     WmWindow raised = *window;
     if (state->raised != 0) {
@@ -1269,12 +1302,14 @@ WM_SHARED WmWindow* wmRaise(WmState *state, WmWindow *window) {
         wmDamage(state, &earlier->frame);
       }
     }
+
     memmove(&state->windows[index], &state->windows[index + 1],
-      sizeof(WmWindow) * (size_t) (top - index));
+      sizeof(WmWindow) * ((size_t) (top - index)));
     state->windows[top] = raised;
     state->raised = raised.id;
     state->raisedFrom = index;
   }
+
   return &state->windows[top];
 }
 
@@ -1315,15 +1350,18 @@ WM_SHARED uint8_t wmButtonAt(const WmWindow *window, int16_t pointX,
   if ((window->flags & WIN_FLAG_DECORATED) == 0) {
     return WM_BUTTON_NONE;
   }
+
   for (uint8_t button = WM_BUTTON_MINIMIZE; button <= WM_BUTTON_CLOSE;
     button++
   ) {
     GfxRect rect;
     wmButtonRect(window, button, &rect);
+
     if (wmContains(&rect, pointX, pointY)) {
       return button;
     }
   }
+
   return WM_BUTTON_NONE;
 }
 
@@ -1348,6 +1386,7 @@ WM_SHARED WmWindow* wmWindowAt(WmState *state, int16_t pointX,
       return window;
     }
   }
+
   return NULL;
 }
 
@@ -1384,6 +1423,7 @@ WM_SHARED void wmDamageDecorations(WmState *state, uint8_t id) {
   if ((window == NULL) || (window->state == WIN_STATE_MINIMIZED)) {
     return;
   }
+
   const GfxRect *frame = &window->frame;
   GfxRect sides[4] = {
     { frame->x, frame->y, frame->w, WM_FRAME_TOP },
@@ -1391,7 +1431,8 @@ WM_SHARED void wmDamageDecorations(WmState *state, uint8_t id) {
     { frame->x + frame->w - WM_BORDER, frame->y, WM_BORDER, frame->h },
     { frame->x, frame->y + frame->h - WM_BORDER, frame->w, WM_BORDER },
   };
-  for (uint8_t ii = 0; ii < sizeof(sides) / sizeof(sides[0]); ii++) {
+
+  for (uint8_t ii = 0; ii < (sizeof(sides) / sizeof(sides[0])); ii++) {
     wmDamage(state, &sides[ii]);
   }
 }
@@ -1430,12 +1471,14 @@ WM_SHARED void wmFocus(WmState *state, uint8_t id, uint8_t detail) {
 /// @return Returns the window where it now is.
 WM_SHARED WmWindow* wmActivate(WmState *state, WmWindow *window) {
   uint8_t id = 0;
+
   if (window != NULL) {
     if ((window->layer == WIN_LAYER_NORMAL)
       || (window->layer == WIN_LAYER_POPUP)
     ) {
       window = wmRaise(state, window);
     }
+
     id = window->id;
   }
   if (((window == NULL) || (window->layer == WIN_LAYER_NORMAL))
@@ -1452,6 +1495,7 @@ WM_SHARED WmWindow* wmActivate(WmState *state, WmWindow *window) {
     state->focus = id;
     wmFocus(state, id, 1);
   }
+
   return window;
 }
 
@@ -1471,6 +1515,7 @@ WM_SHARED WmWindow* wmTopNormal(WmState *state) {
       return window;
     }
   }
+
   return NULL;
 }
 
@@ -1496,11 +1541,13 @@ WM_SHARED void wmResized(WmState *state, const WmWindow *window,
     state->gridsResized = true;
     return;
   }
+
   WinEvent *event = wmSend(state, window->owner, WIN_EVENT_RESIZED,
     window->id);
   if (event != NULL) {
     event->x = window->frame.w;
     event->y = window->frame.h;
+
     if ((window->flags & WIN_FLAG_DECORATED) != 0) {
       event->x -= 2 * WM_BORDER;
       event->y -= WM_FRAME_TOP + WM_BORDER;
@@ -1519,6 +1566,7 @@ WM_SHARED void wmResized(WmState *state, const WmWindow *window,
 /// @return This function returns no value.
 WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
   *body = window->frame;
+
   if ((window->flags & WIN_FLAG_DECORATED) != 0) {
     body->x += WM_BORDER;
     body->y += WM_FRAME_TOP;
@@ -1546,8 +1594,10 @@ WM_SHARED void wmWidgetRect(const WmWindow *window, const WmWidget *widget,
   GfxRect body;
   wmBody(window, &body);
   *rect = widget->rect;
+
   if ((widget->anchor & WIN_ANCHOR_RIGHT) != 0) {
     int16_t right = body.w - widget->marginRight;
+
     if ((widget->anchor & WIN_ANCHOR_LEFT) != 0) {
       rect->w = right - rect->x;
     } else {
@@ -1556,12 +1606,14 @@ WM_SHARED void wmWidgetRect(const WmWindow *window, const WmWidget *widget,
   }
   if ((widget->anchor & WIN_ANCHOR_BOTTOM) != 0) {
     int16_t bottom = body.h - widget->marginBottom;
+
     if ((widget->anchor & WIN_ANCHOR_TOP) != 0) {
       rect->h = bottom - rect->y;
     } else {
       rect->y = bottom - rect->h;
     }
   }
+
   rect->x += body.x;
   rect->y += body.y;
 }
@@ -1581,6 +1633,7 @@ WM_SHARED WmWidget* wmWidgetById(WmWidgets *widgets, uint8_t id) {
       return &widgets->widget[ii];
     }
   }
+
   return NULL;
 }
 
@@ -1614,9 +1667,11 @@ WM_SHARED void wmReleaseChanged(WmState *state) {
   WmWindow *window = wmFind(state, state->heldWindow);
   WmWidget *field = (window != NULL)
     ? wmWidgetById((WmWidgets*) window->widgets, state->heldWidget) : NULL;
+
   if (field != NULL) {
     wmChanged(state, window, field, field->textLength);
   }
+
   state->heldWindow = 0;
 }
 
@@ -1638,6 +1693,7 @@ WM_SHARED uint16_t wmTextStorage(const WmWidget *widget) {
   ) {
     return widget->itemsSize;
   }
+
   return widget->textLength;
 }
 
@@ -1650,6 +1706,7 @@ WM_SHARED uint16_t wmTextStorage(const WmWidget *widget) {
 /// @return Returns the number of rows.
 WM_SHARED uint16_t wmListRows(const GfxRect *rect) {
   int16_t rows = (rect->h - 2) / WM_LIST_ITEM_HEIGHT;
+
   return (rows < 1) ? 1 : (uint16_t) rows;
 }
 
@@ -1666,14 +1723,16 @@ WM_SHARED void wmShowSelection(const WmWindow *window, WmWidget *list) {
   GfxRect rect;
   wmWidgetRect(window, list, &rect);
   uint16_t rows = wmListRows(&rect);
+
   if (list->value != WIN_NO_ITEM) {
     if (list->value < list->top) {
       list->top = list->value;
-    } else if (list->value >= list->top + rows) {
+    } else if (list->value >= (list->top + rows)) {
       list->top = (uint16_t) (list->value - rows + 1);
     }
   }
-  if (list->top + rows > list->numItems) {
+
+  if ((list->top + rows) > list->numItems) {
     list->top = (list->numItems > rows) ? (uint16_t) (list->numItems - rows)
       : 0;
   }
@@ -1701,17 +1760,19 @@ WM_SHARED uint8_t wmFieldScroll(const WmState *state, const WmWindow *window,
 ) {
   GfxRect rect;
   wmWidgetRect(window, widget, &rect);
-  int16_t shown = (rect.w - 2 * WM_FIELD_INSET)
+  int16_t shown = (rect.w - (2 * WM_FIELD_INSET))
     / state->display.builtInFont.glyphW;
   if (shown < 1) {
     shown = 1;
   }
+
   uint8_t scroll = widget->scroll;
   if (widget->caret < scroll) {
     scroll = widget->caret;
-  } else if (widget->caret - scroll > shown) {
+  } else if ((widget->caret - scroll) > shown) {
     scroll = (uint8_t) (widget->caret - shown);
   }
+
   return scroll;
 }
 
@@ -1725,8 +1786,8 @@ WM_SHARED uint8_t wmFieldScroll(const WmState *state, const WmWindow *window,
 ///
 /// @return Returns the bytes.
 WM_SHARED int32_t wmGridBytes(uint8_t columns, uint8_t rows) {
-  return (int32_t) sizeof(WmGrid)
-    + (int32_t) columns * rows * WM_GRID_PLANES;
+  return ((int32_t) sizeof(WmGrid))
+    + (((int32_t) columns) * rows * WM_GRID_PLANES);
 }
 
 /// @fn static bool wmCharge(WmState *state, ProcessId pid, int32_t bytes)
@@ -1747,13 +1808,17 @@ WM_SHARED bool wmCharge(WmState *state, ProcessId pid, int32_t bytes) {
     if (client->pid != pid) {
       continue;
     }
-    int32_t used = (int32_t) client->used + bytes;
+
+    int32_t used = ((int32_t) client->used) + bytes;
     if ((bytes > 0) && (used > state->budget)) {
       return false;
     }
+
     client->used = (uint16_t) ((used < 0) ? 0 : used);
+
     return true;
   }
+
   return true;
 }
 
@@ -1775,9 +1840,11 @@ WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
 ) {
   const WmGrid *grid = (const WmGrid*) window->content;
   GfxRect body;
+
   wmBody(window, &body);
   int16_t width = grid->rect.w;
   int16_t height = grid->rect.h;
+
   if ((grid->anchor & (WIN_ANCHOR_LEFT | WIN_ANCHOR_RIGHT))
     == (WIN_ANCHOR_LEFT | WIN_ANCHOR_RIGHT)
   ) {
@@ -1788,15 +1855,18 @@ WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
   ) {
     height = body.h - grid->rect.y - grid->marginBottom;
   }
+
   place->x = body.x + grid->rect.x;
   place->y = body.y + grid->rect.y;
   place->w = width / state->display.builtInFont.glyphW;
   place->h = height / state->display.builtInFont.glyphH;
+
   if (place->w < 1) {
     place->w = 1;
   } else if (place->w > UINT8_MAX) {
     place->w = UINT8_MAX;
   }
+
   if (place->h < 1) {
     place->h = 1;
   } else if (place->h > WM_GRID_MAX_ROWS) {
@@ -1826,22 +1896,27 @@ WM_SHARED void wmGridMargins(WmState *state, const WmWindow *window,
   int16_t right = left + body.w;
   int16_t bottom = top + body.h;
   int16_t cellsRight
-    = grid->left + grid->columns * state->display.builtInFont.glyphW;
+    = grid->left + (grid->columns * state->display.builtInFont.glyphW);
   int16_t cellsBottom
-    = grid->top + grid->rows * state->display.builtInFont.glyphH;
+    = grid->top + (grid->rows * state->display.builtInFont.glyphH);
+
   if (cellsRight > right) {
     cellsRight = right;
   }
+
   if (cellsBottom > bottom) {
     cellsBottom = bottom;
   }
+
   GfxRect margins[WM_GRID_MARGINS] = {
     { left, top, body.w, grid->top - top },
     { left, cellsBottom, body.w, bottom - cellsBottom },
     { left, grid->top, grid->left - left, cellsBottom - grid->top },
     { cellsRight, grid->top, right - cellsRight, cellsBottom - grid->top },
   };
+
   grid->numMargins = 0;
+
   for (uint8_t ii = 0; ii < WM_GRID_MARGINS; ii++) {
     if ((margins[ii].w > 0) && (margins[ii].h > 0)) {
       grid->margins[grid->numMargins++] = margins[ii];
@@ -1882,8 +1957,8 @@ WM_SHARED void wmGridCursor(WmGrid *grid) {
   if (grid->cursorShown && (grid->cursorRow < grid->rows)
     && (grid->cursorColumn < grid->columns)
   ) {
-    uint8_t *attribute = &grid->cells[(size_t) grid->rows * grid->columns
-      + (size_t) grid->cursorRow * grid->columns + grid->cursorColumn];
+    uint8_t *attribute = &grid->cells[(((size_t) grid->rows) * grid->columns)
+      + (((size_t) grid->cursorRow) * grid->columns) + grid->cursorColumn];
     *attribute = WIN_ATTRIBUTE(WIN_ATTRIBUTE_BACKGROUND(*attribute),
       WIN_ATTRIBUTE_FOREGROUND(*attribute));
   }
@@ -1903,18 +1978,22 @@ WM_SHARED void wmGridUnbind(WmGrid *grid) {
   grid->numHeld = 0;
   grid->reportWanted = false;
   grid->winsizeWanted = false;
+
   if ((grid->input != NULL) && processMessageDone(grid->input)) {
     processMessageRelease(grid->input);
     grid->input = NULL;
   }
+
   if ((grid->winsize != NULL) && processMessageDone(grid->winsize)) {
     processMessageRelease(grid->winsize);
     grid->winsize = NULL;
   }
+
   if ((grid->input == NULL) && (grid->inputArgs != NULL)) {
     MESSAGE_ARGS_DESTROY(grid->inputArgs);
     grid->inputArgs = NULL;
   }
+
   if ((grid->winsize == NULL) && (grid->winsizeArgs != NULL)) {
     MESSAGE_ARGS_DESTROY(grid->winsizeArgs);
     grid->winsizeArgs = NULL;

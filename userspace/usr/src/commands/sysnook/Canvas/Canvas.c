@@ -65,7 +65,7 @@ static const uint8_t _wmRecordSizes[] = {
   0,                          // GFX_CMD_DRAW_SUB_IMAGE
   WM_TEXT_RECORD,             // GFX_CMD_DRAW_TEXT
 };
-GFX_STATIC_ASSERT(sizeof(_wmRecordSizes) == GFX_CMD_DRAW_TEXT + 1,
+GFX_STATIC_ASSERT(sizeof(_wmRecordSizes) == (GFX_CMD_DRAW_TEXT + 1),
   "_wmRecordSizes needs an entry for each tag up to GFX_CMD_DRAW_TEXT");
 GFX_STATIC_ASSERT((GFX_CMD_SET_FG_COLOR == 4) && (GFX_CMD_CLEAR == 8)
   && (GFX_CMD_DRAW_IMAGE == 13),
@@ -96,14 +96,17 @@ static const uint8_t _wmPenTags[WM_PEN_RECORDS] = {
 static uint16_t wmRecordLength(const uint8_t *record, uint16_t left) {
   uint8_t tag = record[GFX_CMD_TAG];
   uint16_t size = 0;
+
   if (tag < sizeof(_wmRecordSizes)) {
     size = _wmRecordSizes[tag];
   }
+
   if ((size == WM_TEXT_RECORD) && (left > GFX_CMD_DRAW_TEXT_LENGTH)) {
     size = GFX_CMD_DRAW_TEXT_SIZE(record[GFX_CMD_DRAW_TEXT_LENGTH]);
   } else if (size == WM_TEXT_RECORD) {
     size = 0;
   }
+
   return (size > left) ? 0 : size;
 }
 
@@ -131,59 +134,74 @@ static uint8_t wmSetCanvas(WmState *state, const WmWindow *window,
 ) {
   const uint8_t *data = args->data;
   uint16_t size = args->size;
+
   if ((size > WIN_CANVAS_MAX) || ((size > 0) && (data == NULL))) {
     return WIN_ERR_INVALID;
   }
+
   for (uint16_t at = 0; at < size; ) {
     uint16_t length = wmRecordLength(&data[at], size - at);
     if (length == 0) {
       return WIN_ERR_INVALID;
     }
+
     at += length;
   }
+
   WmCanvas *preloads = (WmCanvas*) canvas->text;
   if (preloads == NULL) {
-    if (((uint32_t) widgets->bytes + sizeof(WmCanvas) > UINT16_MAX)
-      || !wmCharge(state, window->owner, sizeof(WmCanvas))
+    if (((((uint32_t) widgets->bytes) + sizeof(WmCanvas)) > UINT16_MAX)
+      || (!wmCharge(state, window->owner, sizeof(WmCanvas)))
     ) {
       return WIN_ERR_NO_MEMORY;
     }
+
     preloads = (WmCanvas*) calloc(1, sizeof(WmCanvas));
     if (preloads == NULL) {
       wmCharge(state, window->owner, -(int32_t) sizeof(WmCanvas));
       return WIN_ERR_NO_MEMORY;
     }
+
     canvas->text = (char*) preloads;
     canvas->itemsSize = sizeof(WmCanvas);
     widgets->bytes = (uint16_t) (widgets->bytes + sizeof(WmCanvas));
   }
+
   wmDiscardCanvas(state, canvas);
   uint8_t status = WIN_OK;
   const uint8_t *pens[WM_PEN_RECORDS] = { NULL, NULL, NULL };
+
   for (uint16_t at = 0; (at < size) && (status == WIN_OK); ) {
     const uint8_t *starting[WM_PEN_RECORDS];
     uint16_t prefix = 0;
+
     for (uint8_t ii = 0; ii < WM_PEN_RECORDS; ii++) {
       starting[ii] = pens[ii];
+
       if (pens[ii] != NULL) {
         prefix += wmRecordLength(pens[ii], WM_CANVAS_CHUNK);
       }
     }
+
     uint16_t chunk = 0;
-    while ((at + chunk < size)
-      && (prefix + chunk
-        + wmRecordLength(&data[at + chunk], size - at - chunk)
+    while (((at + chunk) < size)
+      && ((prefix + chunk
+        + wmRecordLength(&data[at + chunk], size - at - chunk))
         <= WM_CANVAS_CHUNK)
     ) {
       const uint8_t *record = &data[at + chunk];
+
       for (uint8_t ii = 0; ii < WM_PEN_RECORDS; ii++) {
         if (record[GFX_CMD_TAG] == _wmPenTags[ii]) {
           pens[ii] = record;
         }
       }
+
       chunk += wmRecordLength(record, size - at - chunk);
     }
+
     GfxHandle handle = GFX_INVALID_HANDLE;
+
     gfxCmdBufBegin(state->cmd, GFX_CMDBUF_NO_FLUSH);
     uint8_t *copy = gfxCmdBufReserve_(state->cmd, prefix + chunk);
     if ((preloads->count == WM_CANVAS_PRELOADS) || (copy == NULL)) {
@@ -196,19 +214,25 @@ static uint8_t wmSetCanvas(WmState *state, const WmWindow *window,
           copy += length;
         }
       }
+
       memcpy(copy, &data[at], chunk);
+
       if (gfxPreupload(state->cmd, &handle) != GFX_OK) {
         status = WIN_ERR_NO_MEMORY;
       } else {
         preloads->preloads[preloads->count++] = handle;
       }
     }
+
     at += chunk;
   }
+
   gfxCmdBufBegin(state->cmd, 0);
+
   if (status != WIN_OK) {
     wmDiscardCanvas(state, canvas);
   }
+
   return status;
 }
 
@@ -226,11 +250,14 @@ void* wmCanvasSet(void *args) {
   WmWidgets *widgets = (WmWidgets*) job->window->widgets;
   WmWidget *canvas = (set->widget != WIN_NONE)
     ? wmWidgetById(widgets, set->widget) : NULL;
+
   set->status = WIN_ERR_NOT_FOUND;
+
   if ((canvas != NULL) && (canvas->kind == WIN_WIDGET_CANVAS)) {
     set->status = wmSetCanvas(job->state, job->window, widgets, canvas, set);
     wmDamageWidget(job->state, job->window, canvas);
   }
+
   return args;
 }
 
@@ -247,5 +274,6 @@ void* wmCanvasDiscard(void *args) {
   for (uint8_t ii = job->from; ii < job->to; ii++) {
     wmDiscardCanvas(job->state, &job->widgets->widget[ii]);
   }
+
   return args;
 }

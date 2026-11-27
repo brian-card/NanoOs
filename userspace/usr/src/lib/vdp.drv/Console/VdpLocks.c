@@ -53,6 +53,7 @@ bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds) {
 
   // The VDP reports the lock states from before this release toggles them.
   uint8_t modifiers = keyData[1];
+
   if (keyData[2] == KEYCODE_NUMLOCK) {
     *numLock = !*numLock;
   } else if (keyData[2] == KEYCODE_CAPSLOCK) {
@@ -64,12 +65,14 @@ bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds) {
   }
 
   *leds = 0;
+
   if ((modifiers & AGON_KEYMOD_SCROLL_LOCK) != 0) {
     *leds |= VDP_LED_SCROLL_LOCK;
   }
   if ((modifiers & AGON_KEYMOD_CAPS_LOCK) != 0) {
     *leds |= VDP_LED_CAPS_LOCK;
   }
+
   if (*numLock) {
     *leds |= VDP_LED_NUM_LOCK;
   }

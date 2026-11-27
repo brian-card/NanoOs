@@ -73,6 +73,7 @@ static const char* privilegeLevelName(uint8_t privilegeLevel) {
   } else if (privilegeLevel == PRIVILEGE_LEVEL_USER) {
     return "user";
   }
+
   return "unknown";
 }
 

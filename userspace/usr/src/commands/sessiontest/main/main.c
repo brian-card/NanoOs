@@ -94,11 +94,14 @@ int main(int argc, char **argv) {
     .columns = 80,
     .status = 1,
   };
+
   if (argc == 4) {
     bridgeArgs.rows = (uint8_t) strtol(argv[2], NULL, 10);
     bridgeArgs.columns = (uint8_t) strtol(argv[3], NULL, 10);
   }
+
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Bridge", "bridgeSession",
     &bridgeArgs);
+
   return bridgeArgs.status;
 }
