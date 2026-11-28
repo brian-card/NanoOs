@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 // An overlay's errno goes through the user API; NanoOsUser.h gives the rest.
@@ -63,6 +64,12 @@ extern "C" {
 /// translation unit that calls none of a helper's wrappers warning-free.
 #define WIN_OUT_OF_LINE static __attribute__((noinline, unused))
 
+/// @def WIN_KEPT_EVENTS
+///
+/// @brief The number of events for other windows a blocking dialog call
+/// keeps for winNextEvent.
+#define WIN_KEPT_EVENTS 8
+
 /// @struct WinSession
 ///
 /// @brief A client's connection to the window server.
@@ -74,6 +81,11 @@ extern "C" {
 /// @param nextEvent The entry of events winNextEvent returns next.
 /// @param hello The window server's answer to WIN_MSG_HELLO.
 /// @param events The events of the last WIN_MSG_EVENTS.
+/// @param numKept The number of entries in kept.
+/// @param keptOverflow Whether kept events were dropped, which winNextEvent
+///   reports with a WIN_EVENT_OVERFLOW before the rest.
+/// @param kept The events a blocking dialog call kept for winNextEvent,
+///   oldest first.
 typedef struct WinSession {
   ProcessId    server;
   bool         connected;
@@ -82,6 +94,9 @@ typedef struct WinSession {
   uint8_t      nextEvent;
   WinHelloArgs hello;
   WinEvent     events[WIN_EVENTS_PER_MESSAGE];
+  uint8_t      numKept;
+  bool         keptOverflow;
+  WinEvent     kept[WIN_KEPT_EVENTS];
 } WinSession;
 
 /// @fn static inline WinError winCall_(WinSession *session, uint8_t type,
@@ -250,14 +265,17 @@ static inline void winDisconnect(WinSession *session) {
   }
 }
 
-/// @fn static inline int winCreateWindowWith(WinSession *session,
-///   const char *title, GfxRect frame, uint8_t layer, uint8_t flags,
-///   const uint8_t *widgets, uint16_t templateSize)
+/// @fn static inline int winCreateOwnedWindow(WinSession *session,
+///   uint8_t owner, const char *title, GfxRect frame, uint8_t layer,
+///   uint8_t flags, const uint8_t *widgets, uint16_t templateSize)
 ///
 /// @brief Create a window in the normal state, with the widgets of a
-/// template.
+/// template, owned by another of the caller's windows.  An owned window goes
+/// in the middle of its owner and stays above it, and a modal one takes the
+/// owner's input while it is open.
 ///
 /// @param session The connection.
+/// @param owner The window that owns it, or WIN_NONE.
 /// @param title The title, which the window server copies, or NULL.
 /// @param frame Where the window goes, in screen coordinates, decorations
 ///   included.
@@ -269,9 +287,9 @@ static inline void winDisconnect(WinSession *session) {
 ///
 /// @return Returns the window's identifier on success, or a negative errno
 /// value on failure.
-WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
-  const char *title, GfxRect frame, uint8_t layer, uint8_t flags,
-  const uint8_t *widgets, uint16_t templateSize
+WIN_OUT_OF_LINE int winCreateOwnedWindow(WinSession *session,
+  uint8_t owner, const char *title, GfxRect frame, uint8_t layer,
+  uint8_t flags, const uint8_t *widgets, uint16_t templateSize
 ) {
   MESSAGE_ARGS_ALLOCATE(WinCreateWindowArgs, args);
 
@@ -291,7 +309,7 @@ WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
   args->layer = layer;
   args->flags = flags;
   args->state = WIN_STATE_NORMAL;
-  args->owner = WIN_NONE;
+  args->owner = owner;
   args->titleLength = (uint8_t) length;
   args->templateSize = (widgets != NULL) ? templateSize : 0;
   args->frame = frame;
@@ -330,6 +348,33 @@ WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
   MESSAGE_ARGS_FREE(args);
 
   return result;
+}
+
+/// @fn static inline int winCreateWindowWith(WinSession *session,
+///   const char *title, GfxRect frame, uint8_t layer, uint8_t flags,
+///   const uint8_t *widgets, uint16_t templateSize)
+///
+/// @brief Create a window in the normal state, with the widgets of a
+/// template.
+///
+/// @param session The connection.
+/// @param title The title, which the window server copies, or NULL.
+/// @param frame Where the window goes, in screen coordinates, decorations
+///   included.
+/// @param layer The WinLayer.
+/// @param flags The WIN_FLAG_* bits.
+/// @param widgets The template's widget records, which the window server
+///   copies, or NULL.
+/// @param templateSize The number of bytes at widgets.
+///
+/// @return Returns the window's identifier on success, or a negative errno
+/// value on failure.
+static inline int winCreateWindowWith(WinSession *session,
+  const char *title, GfxRect frame, uint8_t layer, uint8_t flags,
+  const uint8_t *widgets, uint16_t templateSize
+) {
+  return winCreateOwnedWindow(session, WIN_NONE, title, frame, layer, flags,
+    widgets, templateSize);
 }
 
 /// @fn static inline int winCreateWindow(WinSession *session,
@@ -1618,12 +1663,13 @@ WIN_OUT_OF_LINE bool winHandleMessage(WinSession *session,
   return false;
 }
 
-/// @fn static inline int winNextEvent(WinSession *session, WinEvent *event,
+/// @fn static inline int winPull_(WinSession *session, WinEvent *event,
 ///   const struct timespec *timeout)
 ///
 /// @brief Get the next event from the window server, waiting for one if
-/// there are none.  A message on the caller's queue that isn't the window
-/// server's is finished and dropped.
+/// there are none, leaving aside the events a dialog call kept.  A message
+/// on the caller's queue that isn't the window server's is finished and
+/// dropped.
 ///
 /// @param session The connection.
 /// @param event Where to store the event.
@@ -1633,7 +1679,7 @@ WIN_OUT_OF_LINE bool winHandleMessage(WinSession *session,
 /// @return Returns 0 when it stores an event, -ETIMEDOUT if the timeout came
 /// first, or -ENOTCONN once the window server has gone away and
 /// WIN_EVENT_DISCONNECTED has been returned.
-WIN_OUT_OF_LINE int winNextEvent(WinSession *session, WinEvent *event,
+WIN_OUT_OF_LINE int winPull_(WinSession *session, WinEvent *event,
   const struct timespec *timeout
 ) {
   while (true) {
@@ -1665,6 +1711,338 @@ WIN_OUT_OF_LINE int winNextEvent(WinSession *session, WinEvent *event,
       }
     }
   }
+}
+
+/// @fn static inline int winNextEvent(WinSession *session, WinEvent *event,
+///   const struct timespec *timeout)
+///
+/// @brief Get the next event, waiting for one if there are none:  the
+/// events a blocking dialog call kept come first, after a
+/// WIN_EVENT_OVERFLOW if it had to drop some.  A message on the caller's
+/// queue that isn't the window server's is finished and dropped.
+///
+/// @param session The connection.
+/// @param event Where to store the event.
+/// @param timeout When to stop waiting, or NULL to wait for as long as it
+///   takes.
+///
+/// @return Returns 0 when it stores an event, -ETIMEDOUT if the timeout came
+/// first, or -ENOTCONN once the window server has gone away and
+/// WIN_EVENT_DISCONNECTED has been returned.
+WIN_OUT_OF_LINE int winNextEvent(WinSession *session, WinEvent *event,
+  const struct timespec *timeout
+) {
+  if (session->keptOverflow) {
+    session->keptOverflow = false;
+    memset(event, 0, sizeof(*event));
+    event->type = WIN_EVENT_OVERFLOW;
+    return 0;
+  } else if (session->numKept > 0) {
+    *event = session->kept[0];
+    session->numKept--;
+    memmove(&session->kept[0], &session->kept[1],
+      session->numKept * sizeof(WinEvent));
+    return 0;
+  }
+
+  return winPull_(session, event, timeout);
+}
+
+/// @fn static inline int winDialogEvent_(WinSession *session,
+///   uint8_t dialog, WinEvent *event)
+///
+/// @brief Get the next event about a dialog, waiting for one, and keep the
+/// events about other windows for winNextEvent, the oldest dropped once
+/// WIN_KEPT_EVENTS are kept.  An event a dialog call nested in this one kept
+/// is taken first.
+///
+/// @param session The connection.
+/// @param dialog The dialog's window.
+/// @param event Where to store the event.
+///
+/// @return Returns 0 when it stores an event, or -ENOTCONN if the window
+/// server has gone away, which winNextEvent then reports.
+WIN_OUT_OF_LINE int winDialogEvent_(WinSession *session, uint8_t dialog,
+  WinEvent *event
+) {
+  for (uint8_t ii = 0; ii < session->numKept; ii++) {
+    if (session->kept[ii].window == dialog) {
+      *event = session->kept[ii];
+      session->numKept--;
+      memmove(&session->kept[ii], &session->kept[ii + 1],
+        (session->numKept - ii) * sizeof(WinEvent));
+      return 0;
+    }
+  }
+
+  while (true) {
+    int rc = winPull_(session, event, NULL);
+    if ((rc < 0) || (event->type == WIN_EVENT_DISCONNECTED)) {
+      session->reported = false;
+      return -ENOTCONN;
+    } else if (event->window == dialog) {
+      return 0;
+    }
+
+    if (session->numKept == WIN_KEPT_EVENTS) {
+      session->keptOverflow = true;
+      session->numKept--;
+      memmove(&session->kept[0], &session->kept[1],
+        session->numKept * sizeof(WinEvent));
+    }
+
+    session->kept[session->numKept++] = *event;
+  }
+}
+
+/// @typedef WinDialogCallback
+///
+/// @brief What winRunDialog calls with each event about its dialog that
+/// doesn't end it, such as a COMMAND from a button without
+/// WIN_WIDGET_ENDS_DIALOG.
+typedef void (*WinDialogCallback)(WinSession *session, const WinEvent *event,
+  void *context);
+
+/// @fn static inline int winRunDialog(WinSession *session, uint8_t dialog,
+///   WinDialogCallback callback, void *context)
+///
+/// @brief Run an application's own dialog, a modal window it made, until a
+/// button with WIN_WIDGET_ENDS_DIALOG, the default button or the cancel
+/// button is pressed, or the dialog is asked to close.  Events about other
+/// windows are kept for winNextEvent.  The caller then reads the dialog's
+/// widgets and destroys it.
+///
+/// @param session The connection.
+/// @param dialog The dialog's window.
+/// @param callback What to call with the dialog's other events, or NULL.
+/// @param context What to pass the callback.
+///
+/// @return Returns the identifier of the button that ended the dialog, 0 for
+/// the cancel button or a request to close, or -ENOTCONN if the window
+/// server went away.
+WIN_OUT_OF_LINE int winRunDialog(WinSession *session, uint8_t dialog,
+  WinDialogCallback callback, void *context
+) {
+  while (true) {
+    WinEvent event;
+    if (winDialogEvent_(session, dialog, &event) < 0) {
+      return -ENOTCONN;
+    } else if (event.type == WIN_EVENT_CLOSE_REQUESTED) {
+      return 0;
+    } else if ((event.type == WIN_EVENT_COMMAND)
+      && ((event.detail & (WIN_WIDGET_ENDS_DIALOG | WIN_WIDGET_DEFAULT
+        | WIN_WIDGET_CANCEL)) != 0)
+    ) {
+      if ((event.detail & WIN_WIDGET_CANCEL) != 0) {
+        return 0;
+      }
+
+      return event.widget;
+    }
+
+    if (callback != NULL) {
+      callback(session, &event, context);
+    }
+  }
+}
+
+/// @fn static inline int winOpenDialog(WinSession *session, uint8_t owner,
+///   uint8_t kind, uint8_t icon, uint8_t buttons, uint8_t maximum,
+///   const char *title, const char *text, const char *initial,
+///   const char *suffix)
+///
+/// @brief Open a stock dialog, modal and owned by one of the caller's
+/// windows, without waiting for its result, for an application with its own
+/// event loop.  Its WIN_EVENT_DIALOG_RESULT tells the caller to read it and
+/// destroy it, and a file dialog's WIN_EVENT_DIALOG_LIST_REQUEST is answered
+/// with winAnswerListRequest from WindowFiles.h.
+///
+/// @param session The connection.
+/// @param owner The window that owns the dialog.
+/// @param kind The WinDialogKind.
+/// @param icon A message's WinDialogIcon.
+/// @param buttons A message's WinDialogButtons.
+/// @param maximum The most bytes of the text or path that can be given back.
+/// @param title The title, or NULL.
+/// @param text A message's text or an input dialog's prompt, or NULL.
+/// @param initial An input dialog's text or a file dialog's path, or NULL.
+/// @param suffix The only suffix a file dialog shows, or NULL for all.
+///
+/// @return Returns the dialog's window on success, or a negative errno
+/// value on failure.
+WIN_OUT_OF_LINE int winOpenDialog(WinSession *session, uint8_t owner,
+  uint8_t kind, uint8_t icon, uint8_t buttons, uint8_t maximum,
+  const char *title, const char *text, const char *initial,
+  const char *suffix
+) {
+  const char *parts[] = { title, text, initial, suffix };
+  size_t size = 0;
+
+  for (uint8_t ii = 0; ii < (sizeof(parts) / sizeof(parts[0])); ii++) {
+    size_t length = (parts[ii] != NULL) ? strlen(parts[ii]) : 0;
+    size += 1 + ((length > UINT8_MAX) ? UINT8_MAX : length);
+  }
+
+  uint8_t *fields = (uint8_t*) malloc(size);
+
+  MESSAGE_ARGS_ALLOCATE(WinOpenDialogArgs, args);
+  int result = -ENOMEM;
+
+  if ((fields != NULL) && (args != NULL)) {
+    size_t at = 0;
+
+    for (uint8_t ii = 0; ii < (sizeof(parts) / sizeof(parts[0])); ii++) {
+      size_t length = (parts[ii] != NULL) ? strlen(parts[ii]) : 0;
+      if (length > UINT8_MAX) {
+        length = UINT8_MAX;
+      }
+
+      fields[at++] = (uint8_t) length;
+      memcpy(&fields[at], (length > 0) ? parts[ii] : "", length);
+      at += length;
+    }
+
+    args->owner = owner;
+    args->kind = kind;
+    args->icon = icon;
+    args->buttons = buttons;
+    args->maximum = maximum;
+    args->size = (uint16_t) size;
+    args->fields = (const uint8_t*) MESSAGE_BUFFER_SHARE(fields, size,
+      MESSAGE_BUFFER_IN, session->server);
+
+    if (args->fields != NULL) {
+      WinError status = winCall_(session, WIN_MSG_OPEN_DIALOG, args,
+        sizeof(*args));
+
+      MESSAGE_BUFFER_UNSHARE(args->fields, fields, MESSAGE_BUFFER_IN);
+      result = winErrno(status);
+
+      if (status == WIN_OK) {
+        result = args->dialog;
+      }
+    }
+  }
+
+  if (args != NULL) {
+    MESSAGE_ARGS_FREE(args);
+  }
+
+  free(fields);
+
+  return result;
+}
+
+/// @typedef WinListAnswer
+///
+/// @brief What answers a file dialog's WIN_EVENT_DIALOG_LIST_REQUEST:
+/// winAnswerListRequest from WindowFiles.h, or NULL for a dialog that
+/// sends none.
+typedef int (*WinListAnswer)(WinSession *session, const WinEvent *event);
+
+/// @fn static inline int winDialogResult_(WinSession *session,
+///   uint8_t dialog, WinListAnswer answer)
+///
+/// @brief Wait for a stock dialog's result, answering its list requests
+/// and keeping the events about other windows for winNextEvent.
+///
+/// @param session The connection.
+/// @param dialog The dialog's window.
+/// @param answer What answers its list requests, or NULL.
+///
+/// @return Returns the WIN_RESULT_* value, or -ENOTCONN if the window server
+/// went away.
+WIN_OUT_OF_LINE int winDialogResult_(WinSession *session, uint8_t dialog,
+  WinListAnswer answer
+) {
+  while (true) {
+    WinEvent event;
+    if (winDialogEvent_(session, dialog, &event) < 0) {
+      return -ENOTCONN;
+    } else if (event.type == WIN_EVENT_DIALOG_RESULT) {
+      return event.value;
+    } else if ((event.type == WIN_EVENT_DIALOG_LIST_REQUEST)
+      && (answer != NULL)
+    ) {
+      answer(session, &event);
+    }
+  }
+}
+
+/// @fn static inline int winMessage(WinSession *session, uint8_t owner,
+///   const char *title, const char *text, uint8_t icon, uint8_t buttons)
+///
+/// @brief Show a message in a stock dialog owned by one of the caller's
+/// windows and wait until it is answered.  Events about other windows are
+/// kept for winNextEvent.
+///
+/// @param session The connection.
+/// @param owner The window that owns the dialog.
+/// @param title The title, or NULL.
+/// @param text The message, wrapped at 40 columns and 10 lines.
+/// @param icon The WinDialogIcon.
+/// @param buttons The WinDialogButtons.
+///
+/// @return Returns the WIN_RESULT_* of the button pressed, WIN_RESULT_CANCEL
+/// for Escape or the close button, or a negative errno value on failure.
+WIN_OUT_OF_LINE int winMessage(WinSession *session, uint8_t owner,
+  const char *title, const char *text, uint8_t icon, uint8_t buttons
+) {
+  int dialog = winOpenDialog(session, owner, WIN_DIALOG_MESSAGE, icon,
+    buttons, 0, title, text, NULL, NULL);
+  if (dialog < 0) {
+    return dialog;
+  }
+
+  int result = winDialogResult_(session, (uint8_t) dialog, NULL);
+
+  winDestroyWindow(session, (uint8_t) dialog);
+
+  return result;
+}
+
+/// @fn static inline int winInput(WinSession *session, uint8_t owner,
+///   const char *title, const char *prompt, char *text, uint8_t size)
+///
+/// @brief Ask for a line of text in a stock dialog owned by one of the
+/// caller's windows and wait until it is answered.  Events about other
+/// windows are kept for winNextEvent.
+///
+/// @param session The connection.
+/// @param owner The window that owns the dialog.
+/// @param title The title, or NULL.
+/// @param prompt The prompt, or NULL.
+/// @param text The initial text, and where the text goes on OK, NUL-ended
+///   and cut to size; unchanged otherwise.
+/// @param size The bytes at text.
+///
+/// @return Returns WIN_RESULT_OK or WIN_RESULT_CANCEL, or a negative errno
+/// value on failure.
+WIN_OUT_OF_LINE int winInput(WinSession *session, uint8_t owner,
+  const char *title, const char *prompt, char *text, uint8_t size
+) {
+  if (size == 0) {
+    return -EINVAL;
+  }
+
+  int dialog = winOpenDialog(session, owner, WIN_DIALOG_INPUT, WIN_ICON_NONE,
+    WIN_BUTTONS_OK_CANCEL, (uint8_t) (size - 1), title, prompt, text, NULL);
+  if (dialog < 0) {
+    return dialog;
+  }
+
+  int result = winDialogResult_(session, (uint8_t) dialog, NULL);
+  if (result == WIN_RESULT_OK) {
+    int rc = winGetText(session, (uint8_t) dialog, WIN_DIALOG_FIELD, text,
+      size);
+    if (rc < 0) {
+      result = rc;
+    }
+  }
+
+  winDestroyWindow(session, (uint8_t) dialog);
+
+  return result;
 }
 
 #ifdef __cplusplus

@@ -555,20 +555,57 @@ typedef enum WinDialogButtons {
 /// @param kind In:  the WinDialogKind.
 /// @param icon In:  the WinDialogIcon, for a message.
 /// @param buttons In:  the WinDialogButtons, for a message.
+/// @param maximum In:  the most bytes of an input dialog's text or a file
+///   dialog's path, at most 255.
 /// @param dialog Out:  the dialog's window identifier.
 /// @param size In:  the bytes at fields.
 /// @param fields In:  the title, then the text or prompt, the initial text or
-///   path, and the suffix, each a length byte and its bytes.
+///   path, and the suffix, each a length byte and its bytes.  A file dialog's
+///   initial path is absolute:  a directory ending in '/', or a file.
 typedef struct WinOpenDialogArgs {
   uint8_t        status;
   uint8_t        owner;
   uint8_t        kind;
   uint8_t        icon;
   uint8_t        buttons;
+  uint8_t        maximum;
   uint8_t        dialog;
   uint16_t       size;
   const uint8_t *fields;
 } WinOpenDialogArgs;
+
+/// @def WIN_DIALOG_FIELD
+///
+/// @brief The widget of a stock input or file dialog whose text is the text
+/// typed, or the name typed.
+#define WIN_DIALOG_FIELD 1
+
+/// @def WIN_DIALOG_PATH
+///
+/// @brief The hidden label of a stock file dialog whose text is the path a
+/// WIN_EVENT_DIALOG_LIST_REQUEST names, or the path chosen once its
+/// WIN_EVENT_DIALOG_RESULT is WIN_RESULT_OK.
+#define WIN_DIALOG_PATH 2
+
+/// @def WIN_LIST_PLACES
+///
+/// @brief A WIN_EVENT_DIALOG_LIST_REQUEST bit:  send the places first, a
+/// WIN_ENTRY_PLACE or WIN_ENTRY_HOME for each directory capability with
+/// DIRCAP_LIST that isn't inside another one sent.
+#define WIN_LIST_PLACES 0x01
+
+/// @def WIN_LIST_CREATE
+///
+/// @brief A WIN_EVENT_DIALOG_LIST_REQUEST bit:  the places must also have
+/// DIRCAP_CREATE, for a save dialog.
+#define WIN_LIST_CREATE 0x02
+
+/// @def WIN_LIST_CHECK
+///
+/// @brief A WIN_EVENT_DIALOG_LIST_REQUEST bit:  instead of listing the
+/// directory the path names, send the path's own entry from its parent
+/// directory, or ENOENT if it has none.
+#define WIN_LIST_CHECK 0x04
 
 /// @def WIN_LISTING_FINAL
 ///
@@ -585,8 +622,9 @@ typedef struct WinOpenDialogArgs {
 /// @param errorNumber In:  the errno value for why the directory couldn't be
 ///   read, or 0.
 /// @param size In:  the bytes at entries.
-/// @param entries In:  per entry, WIN_ENTRY_FILE or WIN_ENTRY_DIRECTORY, a
-///   length byte, and the name.
+/// @param entries In:  per entry, its WIN_ENTRY_* kind, a length byte, and
+///   the name, or a place's whole path.  A directory's ".." is sent only if
+///   the application may list it.
 typedef struct WinDialogListingArgs {
   uint8_t        status;
   uint8_t        dialog;
@@ -604,6 +642,16 @@ typedef struct WinDialogListingArgs {
 ///
 /// @brief A WinDialogListingArgs entry's kind:  a directory.
 #define WIN_ENTRY_DIRECTORY 1
+/// @def WIN_ENTRY_PLACE
+///
+/// @brief A WinDialogListingArgs entry's kind:  a place, a directory the
+/// application may list, by its whole path ending in '/'.
+#define WIN_ENTRY_PLACE     2
+/// @def WIN_ENTRY_HOME
+///
+/// @brief A WinDialogListingArgs entry's kind:  the place that is the
+/// application's home directory.
+#define WIN_ENTRY_HOME      3
 
 /// @enum WinTaskOperation
 ///
@@ -656,7 +704,8 @@ typedef struct WinTaskWindowArgs {
 ///   rows:  a text grid's.
 /// @param WIN_EVENT_STATE detail:  the new WinState.
 /// @param WIN_EVENT_FOCUS detail:  1 activated, 0 deactivated.
-/// @param WIN_EVENT_COMMAND widget, value.
+/// @param WIN_EVENT_COMMAND widget, value, and detail:  the widget's
+///   WIN_WIDGET_* flags.
 /// @param WIN_EVENT_CHANGED widget, value:  a list's new selection, or a text
 ///   field's text's length, sent once the field has gone unchanged for a
 ///   quarter of a second, or sooner, before anything else the user does to
@@ -665,8 +714,11 @@ typedef struct WinTaskWindowArgs {
 /// @param WIN_EVENT_POINTER widget, x, y, buttons, and detail:  the wheel.
 /// @param WIN_EVENT_SESSION_ENDED widget:  the text grid.
 /// @param WIN_EVENT_DIALOG_RESULT window:  the dialog.  value:  a WIN_RESULT_*.
-/// @param WIN_EVENT_DIALOG_LIST_REQUEST window:  the dialog.  The path is read
-///   with WIN_MSG_GET_WIDGET.
+///   The text or path is read with WIN_MSG_GET_WIDGET from WIN_DIALOG_FIELD
+///   or WIN_DIALOG_PATH, and then the dialog is destroyed.
+/// @param WIN_EVENT_DIALOG_LIST_REQUEST window:  the dialog.  value:  the
+///   WIN_LIST_* bits.  The path is read with WIN_MSG_GET_WIDGET from
+///   WIN_DIALOG_PATH, and the answer sent with WIN_MSG_DIALOG_LISTING.
 /// @param WIN_EVENT_WINDOW_LIST window, and detail:  the WinListChange.
 /// @param WIN_EVENT_OVERFLOW Events were dropped after this one.
 /// @param WIN_EVENT_DISCONNECTED The window server has gone away.  Window.h
