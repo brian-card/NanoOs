@@ -104,7 +104,7 @@ static int change(Wintest *wintest, int ii) {
     return -1;
   }
 
-  uint8_t window = (uint8_t) strtol(argv[ii + 1], NULL, 0);
+  uint8_t window = windowWord(wintest, argv[ii + 1]);
   uint8_t widget = (uint8_t) strtol(argv[ii + 2], NULL, 0);
 
   if (remove) {

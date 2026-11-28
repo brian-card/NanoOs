@@ -30,8 +30,9 @@
 
 /// @file Demo.c
 ///
-/// @brief wintest demo's script:  a window with every kind of widget, and
-/// one whose canvas holds graphics 6's cells.
+/// @brief wintest demo's script:  a window with every kind of widget, one
+/// whose canvas holds graphics 6's cells, and one whose buttons open each
+/// kind of dialog.
 
 #include "Wintest.h"
 
@@ -63,7 +64,32 @@ static const char _demoScript[] =
   "window 8,24,300,300 All_widgets "
   "canvas 1 0,0,320,240 "
   "window 316,24,322,256 Canvas "
-  "cells . 1 192";
+  "cells . 1 192 "
+  "button 1 10,10,140,16 Message... button 2 10,32,140,16 Input... "
+  "button 3 10,54,140,16 Open... button 4 10,76,140,16 Save... "
+  "button 5 10,98,140,16 Find_(own_dialog)... "
+  "window 316,288,160,140 Dialogs";
+
+/// @var _dialogCommands
+///
+/// @brief What each button of the Dialogs window does, as wintest run's
+/// commands, with %u for the Dialogs window, which owns the dialog.  Find
+/// is an application's own dialog whose Browse... opens a file dialog over
+/// it; its field and box are read back once it ends.
+static const char *const _dialogCommands[] = {
+  "message %u question yesnocancel Message "
+    "Save_the_changes_to_the_document_before_closing_it?",
+  "input %u Input Your_name: Nook",
+  "open %u -",
+  "save %u /tmp/untitled.txt",
+  "label 1 10,10,150,10 left Find_what: field 2 10,24,150,14 32 - "
+    "check 3 10,46,150,12 0 Match_case "
+    "button 4 170,8,74,16 Find flags=default "
+    "button 5 170,28,74,16 Browse... "
+    "button 6 170,48,74,16 Cancel flags=cancel "
+    "dialog %u 0,0,262,100 Find browse=5 "
+    "get . 2 text get . 3 value destroy .",
+};
 
 /// @fn void* wintestDemo(void *args)
 ///
@@ -80,6 +106,74 @@ void* wintestDemo(void *args) {
   if (*text != NULL) {
     memcpy(*text, _demoScript, sizeof(_demoScript));
   }
+
+  return args;
+}
+
+/// @fn void* wintestDemoCommands(void *args)
+///
+/// @brief Make the commands of the Dialogs window's button pressed the
+/// context's arguments, on the heap, for wintest demo.
+///
+/// @param args A pointer to the Wintest, whose demoButton is set, and whose
+///   argc, argv, demoText and demoWords are set, demoWords NULL if there was
+///   no memory or no such button.
+///
+/// @return Always returns the provided pointer.
+void* wintestDemoCommands(void *args) {
+  Wintest *wintest = (Wintest*) args;
+  uint8_t button = wintest->demoButton;
+
+  wintest->demoText = NULL;
+  wintest->demoWords = NULL;
+
+  if ((button == 0) || (button > WINTEST_COUNT(_dialogCommands))) {
+    return args;
+  }
+
+  const char *format = _dialogCommands[button - 1];
+  size_t size = strlen(format) + 4;
+  char *text = (char*) malloc(size);
+  int count = WINTEST_SCRIPT_START;
+
+  if (text == NULL) {
+    return args;
+  }
+
+  snprintf(text, size, format, (unsigned int) wintest->demoWindow);
+
+  for (const char *word = text; *word != '\0'; ) {
+    word += strspn(word, " ");
+
+    if (*word != '\0') {
+      count++;
+      word += strcspn(word, " ");
+    }
+  }
+
+  char **words = (char**) calloc((size_t) count, sizeof(char*));
+  if (words == NULL) {
+    free(text);
+    return args;
+  }
+
+  count = WINTEST_SCRIPT_START;
+
+  for (char *word = text; *(word += strspn(word, " ")) != '\0'; ) {
+    words[count++] = word;
+    word += strcspn(word, " ");
+
+    if (*word != '\0') {
+      *word++ = '\0';
+    }
+  }
+
+  words[0] = wintest->argv[0];
+  words[1] = wintest->argv[1];
+  wintest->demoText = text;
+  wintest->demoWords = words;
+  wintest->argc = count;
+  wintest->argv = words;
 
   return args;
 }

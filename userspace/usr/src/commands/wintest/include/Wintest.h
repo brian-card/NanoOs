@@ -49,6 +49,13 @@
 /// @param more Whether Print's caller should go on reading events.
 /// @param handled Whether the Grid overlay knew the command.
 /// @param last The window the script made last, which "." names, or 0.
+/// @param browse The button of the dialog command's dialog that opens a file
+///   dialog over it, or 0.
+/// @param demoWindow wintest demo's Dialogs window, or 0.
+/// @param demoButton The button of the Dialogs window pressed, whose
+///   commands wintest demo carries out next, or 0.
+/// @param demoText The text of those commands, on the heap, or NULL.
+/// @param demoWords The words of those commands, on the heap, or NULL.
 /// @param argc The number of arguments.
 /// @param index The index in argv of the command the Grid overlay carries
 ///   out, and after it, of the next command.
@@ -68,6 +75,11 @@ typedef struct Wintest {
   bool        more;
   bool        handled;
   uint8_t     last;
+  uint8_t     browse;
+  uint8_t     demoWindow;
+  uint8_t     demoButton;
+  char       *demoText;
+  char      **demoWords;
   int         argc;
   int         index;
   long        waitMs;
@@ -277,10 +289,12 @@ static inline WinTemplate* pending(Wintest *wintest) {
 static inline uint8_t parseWidgetFlags(const char *names) {
   static const char *const known[] = {
     "disabled", "hidden", "default", "cancel", "password", "readonly",
+    "ends",
   };
   static const uint8_t bits[] = {
     WIN_WIDGET_DISABLED, WIN_WIDGET_HIDDEN, WIN_WIDGET_DEFAULT,
     WIN_WIDGET_CANCEL, WIN_WIDGET_PASSWORD, WIN_WIDGET_READ_ONLY,
+    WIN_WIDGET_ENDS_DIALOG,
   };
   uint8_t flags = 0;
 
@@ -359,6 +373,58 @@ static inline int options(Wintest *wintest, int ii, uint8_t *flags,
   }
 
   return ii;
+}
+
+/// @def WINTEST_PATH_SIZE
+///
+/// @brief The bytes of the buffers dialogs give paths and texts back in.
+#define WINTEST_PATH_SIZE 255
+
+/// @fn static inline void printResult(const char *command, int result,
+///   const char *text)
+///
+/// @brief Print what a dialog command got:  the result's name and the text
+/// or path, or the error.
+///
+/// @param command The command.
+/// @param result The WIN_RESULT_*, or a negative errno value.
+/// @param text The text or path, or NULL.
+///
+/// @return This function returns no value.
+static inline void printResult(const char *command, int result,
+  const char *text
+) {
+  static const char *const names[] = { "cancel", "ok", "yes", "no" };
+
+  if (result < 0) {
+    printf("wintest: %s: %s\n", command, strerror(-result));
+  } else if (text != NULL) {
+    printf("wintest: %s: %s %s\n", command, names[result & WIN_RESULT_NO],
+      text);
+  } else {
+    printf("wintest: %s: %s\n", command, names[result & WIN_RESULT_NO]);
+  }
+}
+
+/// @fn static inline char* initialText(const char *word)
+///
+/// @brief Make a dialog's initial text from a word, '-' standing for none,
+/// in a buffer of WINTEST_PATH_SIZE bytes the dialog can write back to.
+///
+/// @param word The word, with '_' for a space.
+///
+/// @return Returns the text, on the heap, or NULL if there is no memory.
+static inline char* initialText(const char *word) {
+  char *text = (char*) calloc(1, WINTEST_PATH_SIZE);
+  char *spacedWord = spaced((strcmp(word, "-") == 0) ? "" : word);
+
+  if ((text != NULL) && (spacedWord != NULL)) {
+    strncpy(text, spacedWord, WINTEST_PATH_SIZE - 1);
+  }
+
+  free(spacedWord);
+
+  return text;
 }
 
 #endif // WINTEST_H

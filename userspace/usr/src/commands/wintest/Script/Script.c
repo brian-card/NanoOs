@@ -57,6 +57,11 @@ static const char *const _layerNames[] = {
 /// @brief The start of create's option that lists the window's flags.
 #define WINTEST_OPTION_FLAGS "flags="
 
+/// @def WINTEST_OPTION_OWNER
+///
+/// @brief The create option that names the window's owner window.
+#define WINTEST_OPTION_OWNER "owner="
+
 /// @struct WintestCommands
 ///
 /// @brief An overlay that carries out some of wintest's commands, and the
@@ -81,6 +86,9 @@ static const WintestCommands _commands[] = {
   { "Draw", "wintestDraw" },
   { "Change", "wintestChange" },
   { "Query", "wintestQuery" },
+  { "Stock", "wintestStock" },
+  { "Files", "wintestFiles" },
+  { "Dialog", "wintestDialog" },
 };
 
 /// @fn static int nameIndex(const char *name, const char *const *names,
@@ -201,16 +209,21 @@ static void print(Wintest *wintest, const char *command, const char *window,
     wintest);
 }
 
-/// @fn static int run(Wintest *wintest)
+/// @def WINTEST_EXIT
 ///
-/// @brief Carry out wintest run's commands, then print events until the
-/// window server goes away.
+/// @brief What commands returns for the exit command.
+#define WINTEST_EXIT (-1)
+
+/// @fn static int commands(Wintest *wintest)
+///
+/// @brief Carry out wintest run's commands.
 ///
 /// @param wintest The context, whose arguments have the commands from
 ///   argv[2].
 ///
-/// @return Returns the exit status.
-static int run(Wintest *wintest) {
+/// @return Returns 0 to go on printing events, WINTEST_EXIT for exit, or the
+/// exit status to end with.
+static int commands(Wintest *wintest) {
   WinSession *session = &wintest->session;
   int argc = wintest->argc;
   char **argv = wintest->argv;
@@ -232,6 +245,7 @@ static int run(Wintest *wintest) {
       ii += 2;
       int layer = WIN_LAYER_NORMAL;
       const char *flags = NULL;
+      uint8_t owner = WIN_NONE;
 
       while ((ii < argc) && (strchr(argv[ii], '=') != NULL)) {
         if (strncmp(argv[ii], WINTEST_OPTION_LAYER,
@@ -244,6 +258,11 @@ static int run(Wintest *wintest) {
           WINTEST_LITERAL_LENGTH(WINTEST_OPTION_FLAGS)) == 0
         ) {
           flags = &argv[ii][WINTEST_LITERAL_LENGTH(WINTEST_OPTION_FLAGS)];
+        } else if (strncmp(argv[ii], WINTEST_OPTION_OWNER,
+          WINTEST_LITERAL_LENGTH(WINTEST_OPTION_OWNER)) == 0
+        ) {
+          owner = windowWord(wintest,
+            &argv[ii][WINTEST_LITERAL_LENGTH(WINTEST_OPTION_OWNER)]);
         }
 
         ii++;
@@ -255,8 +274,8 @@ static int run(Wintest *wintest) {
         return 1;
       }
 
-      int window = winCreateWindow(session, title, frame, (uint8_t) layer,
-        (uint8_t) bits);
+      int window = winCreateOwnedWindow(session, owner, title, frame,
+        (uint8_t) layer, (uint8_t) bits, NULL, 0);
       if (window < 0) {
         print(wintest, command, NULL, window);
       } else {
@@ -289,7 +308,7 @@ static int run(Wintest *wintest) {
 
       ii += 2;
     } else if ((strcmp(command, "destroy") == 0) && (first != NULL)) {
-      winDestroyWindow(session, (uint8_t) strtol(first, NULL, 10));
+      winDestroyWindow(session, windowWord(wintest, first));
       ii++;
     } else if ((strcmp(command, "sleep") == 0) && (first != NULL)) {
       struct timespec delay = { 0, 0 };
@@ -308,7 +327,7 @@ static int run(Wintest *wintest) {
     } else if (strcmp(command, "closes") == 0) {
       wintest->closes = true;
     } else if (strcmp(command, "exit") == 0) {
-      return 0;
+      return WINTEST_EXIT;
     } else {
       wintest->index = ii - 1;
       wintest->handled = false;
@@ -329,10 +348,58 @@ static int run(Wintest *wintest) {
     }
   }
 
-  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Print", "wintestEvents",
-    wintest);
-
   return 0;
+}
+
+/// @fn static int run(Wintest *wintest)
+///
+/// @brief Carry out wintest run's commands, then print events until the
+/// window server goes away.  For wintest demo, a press on a button of its
+/// Dialogs window, the window made last, carries out that button's commands
+/// from the Demo overlay first.
+///
+/// @param wintest The context, whose arguments have the commands from
+///   argv[2].
+///
+/// @return Returns the exit status.
+static int run(Wintest *wintest) {
+  int rc = commands(wintest);
+  if (rc == WINTEST_EXIT) {
+    return 0;
+  } else if (rc != 0) {
+    return rc;
+  }
+
+  int argc = wintest->argc;
+  char **argv = wintest->argv;
+
+  if (strcmp(argv[1], "demo") == 0) {
+    wintest->demoWindow = wintest->last;
+  }
+
+  while (true) {
+    wintest->demoButton = 0;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Print", "wintestEvents",
+      wintest);
+
+    if (wintest->demoButton == 0) {
+      return 0;
+    }
+
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Demo", "wintestDemoCommands",
+      wintest);
+
+    if (wintest->demoWords != NULL) {
+      commands(wintest);
+    }
+
+    free(wintest->demoWords);
+    free(wintest->demoText);
+    wintest->demoWords = NULL;
+    wintest->demoText = NULL;
+    wintest->argc = argc;
+    wintest->argv = argv;
+  }
 }
 
 /// @fn void* wintestRun(void *args)

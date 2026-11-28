@@ -44,8 +44,8 @@ static const char *const _stateNames[] = {
 
 /// @fn static void printKey(const WinEvent *event)
 ///
-/// @brief Print a WIN_EVENT_KEY:  KEY, the key as its character or its
-/// number, the modifiers held, and "up" for a release.
+/// @brief Print a WIN_EVENT_KEY:  KEY, its window, the key as its character
+/// or its number, the modifiers held, and "up" for a release.
 ///
 /// @param event The event.
 ///
@@ -66,7 +66,7 @@ static void printKey(const WinEvent *event) {
     snprintf(name, sizeof(name), "0x%02x", (unsigned int) event->key);
   }
 
-  printf("KEY %s", name);
+  printf("KEY %u %s", (unsigned int) event->window, name);
 
   for (size_t ii = 0; ii < WINTEST_COUNT(modifiers); ii++) {
     if ((event->modifiers & modifierBits[ii]) != 0) {
@@ -229,6 +229,15 @@ void* wintestEvents(void *args) {
       }
 
       wintest->more = printEvent(&wintest->event);
+
+      // A press on wintest demo's Dialogs window is carried out by run.
+      if ((wintest->demoWindow != 0)
+        && (wintest->event.type == WIN_EVENT_COMMAND)
+        && (wintest->event.window == wintest->demoWindow)
+      ) {
+        wintest->demoButton = wintest->event.widget;
+        break;
+      }
 
       if (wintest->closes
         && (wintest->event.type == WIN_EVENT_CLOSE_REQUESTED)
