@@ -1457,7 +1457,10 @@ def test_widgets_wintest_demo_opens_every_kind_of_widget(session):
     expect_line(session, "wintest: window 2", timeout=30)
     expect_line(session, "wintest: window 3", timeout=30)
     expect_line(session, "wintest: cells .: ok", timeout=30)
+    # The last is the Dialogs window, whose buttons open the dialogs.
+    expect_line(session, "wintest: window 4", timeout=30)
     expect_line(session, "FOCUS 3 activated", timeout=30)
+    expect_line(session, "FOCUS 4 activated", timeout=30)
     settle(vdp)
     # Row 1, column 0 of the canvas's cells.
     wait_pixels(vdp, {(327, 69): gr.RED})
@@ -1468,14 +1471,14 @@ def test_widgets_wintest_demo_opens_every_kind_of_widget(session):
 
 def test_widgets_activating_a_window_repaints_only_what_changed(session):
     # Nothing covers the demo's first window, so activating it with a click
-    # on an empty part of its body redraws its title, the other window's,
-    # and no widget.
+    # on an empty part of its body redraws its title, the title of the
+    # Dialogs window, which was active, and no widget.
     boot_nook(session)
     base = start_nook(session, demo=False)
     vdp = session.vdp
     session.child.sendline("wintest demo &")
     expect_line(session, "wintest: cells .: ok", timeout=30)
-    expect_line(session, "FOCUS 2 activated", timeout=30)
+    expect_line(session, "FOCUS 3 activated", timeout=30)
     settle(vdp)
     before = len(vdp.events)
     click(vdp, (250, 250))
@@ -1483,7 +1486,7 @@ def test_widgets_activating_a_window_repaints_only_what_changed(session):
     settle(vdp)
     drawn = "".join(chr(data) for _time, kind, data in vdp.events[before:]
                     if kind == "gtext")
-    assert sorted(drawn) == sorted("All widgets" + "Canvas"), drawn
+    assert sorted(drawn) == sorted("All widgets" + "Dialogs"), drawn
     quit_nook(session, base)
     check_clean(session)
 

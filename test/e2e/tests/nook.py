@@ -1371,8 +1371,8 @@ def test_nook_ctrl_q_goes_to_the_application_and_nook_keeps_running(session):
     expect_line(session, "wintest: window 1")
     expect_line(session, "FOCUS 1 activated")
     vdp.ctrl("q")
-    expect_line(session, "KEY q ctrl")
-    expect_line(session, "KEY q ctrl up")
+    expect_line(session, "KEY 1 q ctrl")
+    expect_line(session, "KEY 1 q ctrl up")
     time.sleep(1)
     assert vdp.context_events()[base:] == ACQUIRE
     assert session.sh("wintest hello") == HELLO
