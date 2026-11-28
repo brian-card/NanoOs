@@ -181,11 +181,63 @@ void* wmOcclude(void *args) {
   return args;
 }
 
+/// @fn static bool wmCovers(const GfxRect *outer, const GfxRect *inner)
+///
+/// @brief Find whether one rectangle holds the whole of another.
+///
+/// @param outer The rectangle that may hold the other.
+/// @param inner The other.
+///
+/// @return Returns true if it does, false otherwise.
+static bool wmCovers(const GfxRect *outer, const GfxRect *inner) {
+  return (inner->x >= outer->x) && (inner->y >= outer->y)
+    && ((inner->x + inner->w) <= (outer->x + outer->w))
+    && ((inner->y + inner->h) <= (outer->y + outer->h));
+}
+
+/// @fn static void wmDropCovered(WmState *state)
+///
+/// @brief Take out of the frame's damage each rectangle another repaints
+/// already:  one holding it that repaints every window there, or only the
+/// same window.  Of two such that are the same, the first is kept.
+///
+/// @param state The window manager's state.
+///
+/// @return This function returns no value.
+static void wmDropCovered(WmState *state) {
+  uint8_t kept = 0;
+
+  for (uint8_t ii = 0; ii < state->numDamage; ii++) {
+    const GfxRect *rect = &state->damage[ii];
+    bool covered = false;
+
+    for (uint8_t jj = 0; (jj < state->numDamage) && (!covered); jj++) {
+      const GfxRect *other = &state->damage[jj];
+      bool same = (memcmp(rect, other, sizeof(GfxRect)) == 0)
+        && (state->damageOwner[ii] == state->damageOwner[jj]);
+
+      covered = (jj != ii) && (!(same && (jj > ii)))
+        && ((state->damageOwner[jj] == 0)
+          || (state->damageOwner[jj] == state->damageOwner[ii]))
+        && wmCovers(other, rect);
+    }
+
+    if (!covered) {
+      state->damage[kept] = state->damage[ii];
+      state->damageOwner[kept] = state->damageOwner[ii];
+      kept++;
+    }
+  }
+
+  state->numDamage = kept;
+}
+
 /// @fn void* wmRestack(void *args)
 ///
 /// @brief Repaint what the windows a raised window moved above were
 /// covering of it, and the focused widgets of the windows that stopped and
-/// started being active.
+/// started being active, then drop the damage that other damage repaints
+/// already, as a window's decorations are when the window was just made.
 ///
 /// @param args A pointer to the WmState.
 ///
@@ -215,6 +267,8 @@ void* wmRestack(void *args) {
     wmDamageFocused(state, state->refocus[ii]);
     state->refocus[ii] = 0;
   }
+
+  wmDropCovered(state);
 
   return args;
 }

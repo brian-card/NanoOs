@@ -223,6 +223,7 @@ static void wmClick(WmState *state, const WmWindow *window,
   if (event != NULL) {
     event->widget = widget->id;
     event->value = widget->value;
+    event->detail = widget->flags;
   }
 }
 
@@ -257,7 +258,9 @@ static void wmSetFocus(WmState *state, const WmWindow *window,
 /// @brief Carry out a key on a text field going down:  a printable key
 /// typed before the caret while the text is under its most, Backspace and
 /// Delete, Left, Right, Home and End, and Enter, which sends
-/// WIN_EVENT_COMMAND.  A read-only field's text doesn't change.
+/// WIN_EVENT_COMMAND.  A read-only field's text doesn't change.  A key that
+/// types or deletes while the whole text is selected replaces it, and any
+/// other ends the selection.
 ///
 /// @param state The window manager's state.
 /// @param window The field's window.
@@ -283,6 +286,23 @@ static bool wmEdit(WmState *state, const WmWindow *window, WmWidget *widget,
   } else if (event->down == 0) {
     return true;
   }
+
+  uint8_t before = length;
+
+  if (widget->selected) {
+    widget->selected = false;
+
+    // A key that types or deletes replaces the whole selected text.
+    if (editable && (printable || (key == GFX_KEY_BACKSPACE)
+      || (key == GFX_KEY_DELETE))
+    ) {
+      widget->textLength = 0;
+      widget->caret = 0;
+      length = 0;
+      caret = 0;
+    }
+  }
+
   if (printable && editable && (length < widget->maxLength)) {
     memmove(&widget->text[caret + 1], &widget->text[caret], length - caret);
     widget->text[caret] = (char) event->ascii;
@@ -323,7 +343,7 @@ static bool wmEdit(WmState *state, const WmWindow *window, WmWidget *widget,
 
   state->gridPainted = true;
 
-  if (widget->textLength != length) {
+  if (widget->textLength != before) {
     if ((state->heldWindow != 0) && ((state->heldWindow != window->id)
       || (state->heldWidget != widget->id))
     ) {
@@ -411,6 +431,7 @@ void* wmControlsPress(void *args) {
     }
 
     widget->caret = (uint8_t) at;
+    widget->selected = false;
     wmSetFocus(state, job->window, widgets, index);
     return args;
   }
@@ -666,6 +687,12 @@ void* wmControlsKey(void *args) {
 /// @return Always returns the provided pointer.
 void* wmControlsWheel(void *args) {
   WmInputJob *job = (WmInputJob*) args;
+  if ((job->state->numOwned != 0)
+    && (wmModalFor(job->state, job->window) != NULL)
+  ) {
+    return args;
+  }
+
   WmWidgets *widgets = (WmWidgets*) job->window->widgets;
   uint8_t index = wmControlAt(job->window, widgets, job->event->x,
     job->event->y);

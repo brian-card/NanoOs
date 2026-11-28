@@ -154,6 +154,12 @@
 #define WM_GRID_DIRTY_BIT(row) \
   ((uint8_t) (1 << ((row) & (WM_GRID_ROWS_PER_BYTE - 1))))
 
+/// @def WM_MAX_DIALOG_EVENTS
+///
+/// @brief The most events about stock dialogs kept for the Dialogs overlay
+/// between its calls.
+#define WM_MAX_DIALOG_EVENTS 8
+
 /// @def WM_MAX_DEFERRED
 ///
 /// @brief The most frames in a row the window server puts off while clients'
@@ -313,6 +319,8 @@ typedef enum WmStartOperation {
 /// @param title The title, on the heap, or NULL.
 /// @param content The window's WmGrid, or NULL.
 /// @param widgets The window's WmWidgets, or NULL.
+/// @param ownerWindow The window that owns this one, or 0.
+/// @param dialog The WmDialog of a stock dialog, or NULL.
 typedef struct WmWindow {
   uint8_t   id;
   uint8_t   layer;
@@ -326,6 +334,8 @@ typedef struct WmWindow {
   char     *title;
   void     *content;
   void     *widgets;
+  uint8_t   ownerWindow;
+  void     *dialog;
 } WmWindow;
 
 /// @struct WmWidget
@@ -346,6 +356,8 @@ typedef struct WmWindow {
 /// @param caret The byte of a text field's text the caret is before.
 /// @param scroll The first byte of a text field's text that is shown.
 /// @param textLength The bytes at text.
+/// @param selected Whether a text field's whole text is selected, so that
+///   the next key typed replaces it.
 /// @param value A box's or toggle button's state, or a list's selection,
 ///   WIN_NO_ITEM for none.
 /// @param top The first item a list shows.
@@ -369,6 +381,7 @@ typedef struct WmWidget {
   uint8_t  caret;
   uint8_t  scroll;
   uint8_t  textLength;
+  bool     selected;
   uint16_t value;
   uint16_t top;
   uint16_t itemsSize;
@@ -672,6 +685,13 @@ typedef struct WmTimes {
 ///   held until the field has been quiet for WM_CHANGED_QUIET_MS, or 0.
 /// @param heldWidget That text field's identifier.
 /// @param heldSince When that text field last changed.
+/// @param numOwned The number of windows that have an owner window.
+/// @param numDialogEvents The number of entries in dialogEvents.
+/// @param dialogEvents The events about stock dialogs the Client overlay
+///   kept from their clients for the Dialogs overlay.
+/// @param timedKind The WmTimed of the frame the Client overlay times.
+/// @param timedStart When what that frame shows happened.
+/// @param timedEnd When that frame was drawn.
 typedef struct WmState {
   uint8_t         numWindows;
   uint8_t         grab;
@@ -749,6 +769,12 @@ typedef struct WmState {
   uint8_t         heldWindow;
   uint8_t         heldWidget;
   struct timespec heldSince;
+  uint8_t         numOwned;
+  uint8_t         numDialogEvents;
+  WinEvent        dialogEvents[WM_MAX_DIALOG_EVENTS];
+  uint8_t         timedKind;
+  const struct timespec *timedStart;
+  struct timespec timedEnd;
 } WmState;
 
 /// @struct WmPaintJob
@@ -883,6 +909,225 @@ typedef struct WmTemplateJob {
   bool           waiting;
   uint8_t        status;
 } WmTemplateJob;
+
+/// @def WM_NOT_PENDING
+///
+/// @brief A WmDialog's pending value while no list request is outstanding.
+#define WM_NOT_PENDING 0xFF
+
+/// @struct WmDialog
+///
+/// @brief What the window server keeps about a stock dialog.
+///
+/// @param kind The WinDialogKind.
+/// @param ended Whether its result has been sent, so that it takes no more
+///   input until its client destroys it.
+/// @param parent The stock file dialog a message the window server opened
+///   itself answers, or 0 for a client's.
+/// @param pending The WIN_LIST_* bits of the list request outstanding, or
+///   WM_NOT_PENDING.
+/// @param maximum The most bytes of the text or path.
+/// @param asking What a file dialog's own message asks:  WM_ASK_NONE,
+///   WM_ASK_REPLACE or WM_ASK_MISSING.
+/// @param started Whether a file dialog has shown a directory yet.
+/// @param truncated Whether the listing coming has more entries than are
+///   kept.
+/// @param listingSize The bytes at listing.
+/// @param placesSize The bytes at places.
+/// @param suffix The only suffix a file dialog shows, or NULL for every file.
+/// @param directory The directory a file dialog shows, ending in '/', or
+///   NULL.
+/// @param places The places' paths, each NUL-ended, in the order shown, or
+///   NULL.
+/// @param listing The entries of the listing coming, as they were sent, or
+///   NULL.
+typedef struct WmDialog {
+  uint8_t  kind;
+  bool     ended;
+  uint8_t  parent;
+  uint8_t  pending;
+  uint8_t  maximum;
+  uint8_t  asking;
+  bool     started;
+  bool     truncated;
+  uint16_t listingSize;
+  uint16_t placesSize;
+  char    *suffix;
+  char    *directory;
+  char    *places;
+  uint8_t *listing;
+} WmDialog;
+
+/// @def WM_ASK_NONE
+///
+/// @brief A file dialog asks nothing.
+#define WM_ASK_NONE    0
+/// @def WM_ASK_REPLACE
+///
+/// @brief A save dialog asks whether to replace the file chosen.
+#define WM_ASK_REPLACE 1
+/// @def WM_ASK_MISSING
+///
+/// @brief An open dialog says the file named doesn't exist.
+#define WM_ASK_MISSING 2
+
+/// @def WM_DIALOG_BUTTONS
+///
+/// @brief The identifier of a stock dialog's button whose result is
+/// WIN_RESULT_CANCEL, the other buttons' being this plus their WIN_RESULT_*.
+#define WM_DIALOG_BUTTONS 20
+
+/// @def WM_DIALOG_PLACES
+///
+/// @brief The identifier of a file dialog's list of places.
+#define WM_DIALOG_PLACES  31
+
+/// @def WM_DIALOG_ENTRIES
+///
+/// @brief The identifier of a file dialog's list of a directory's entries.
+#define WM_DIALOG_ENTRIES 32
+
+/// @def WM_DIALOG_LOOK_IN
+///
+/// @brief The identifier of a file dialog's label of the directory shown.
+#define WM_DIALOG_LOOK_IN 33
+
+/// @def WM_DIALOG_ICON_SIZE
+///
+/// @brief The width and height of a message's icon.
+#define WM_DIALOG_ICON_SIZE 16
+
+/// @def WM_DIALOG_ICON
+///
+/// @brief The identifier of a message's icon, a canvas.
+#define WM_DIALOG_ICON 30
+
+/// @def WM_DIALOG_TEMPLATE
+///
+/// @brief The bytes of the buffer a stock dialog's template is made in.
+#define WM_DIALOG_TEMPLATE 1024
+
+/// @def WM_DIALOG_PARTS
+///
+/// @brief The number of an open request's fields:  title, text, initial text
+/// and suffix.
+#define WM_DIALOG_PARTS 4
+
+/// @struct WmDialogText
+///
+/// @brief One of an open request's fields, which has no terminator.
+///
+/// @param text The bytes.
+/// @param length How many.
+typedef struct WmDialogText {
+  const char *text;
+  uint8_t     length;
+} WmDialogText;
+
+/// @struct WmDialogOpen
+///
+/// @brief A stock dialog to open.
+///
+/// @param kind The WinDialogKind.
+/// @param icon A message's WinDialogIcon.
+/// @param buttons A message's WinDialogButtons.
+/// @param maximum The most bytes of the text or path.
+/// @param owner The window that owns it.
+/// @param parent The file dialog a message of the window server's own
+///   answers, or 0.
+/// @param pid The client it is opened for.
+/// @param parts The title, text, initial text and suffix.
+typedef struct WmDialogOpen {
+  uint8_t      kind;
+  uint8_t      icon;
+  uint8_t      buttons;
+  uint8_t      maximum;
+  uint8_t      owner;
+  uint8_t      parent;
+  ProcessId    pid;
+  WmDialogText parts[WM_DIALOG_PARTS];
+} WmDialogOpen;
+
+/// @def WM_ICON_RECORDS
+///
+/// @brief The bytes of the canvas records a message's icon is drawn with.
+#define WM_ICON_RECORDS 64
+
+/// @struct WmMakeJob
+///
+/// @brief What the Dialogs overlay hands the Make overlay to make a stock
+/// dialog's template.
+///
+/// @param state The window manager's state.
+/// @param open The dialog.
+/// @param buffer Where the template goes:  WM_DIALOG_TEMPLATE bytes.
+/// @param size Out:  the bytes of the template.
+/// @param frame Out:  the size of the dialog's frame.
+/// @param focus Out:  the widget that has the focus first.
+/// @param iconSize Out:  the bytes at icon, 0 for no icon.
+/// @param icon Out:  the canvas records of a message's icon.
+typedef struct WmMakeJob {
+  WmState            *state;
+  const WmDialogOpen *open;
+  uint8_t            *buffer;
+  uint16_t            size;
+  GfxRect             frame;
+  uint8_t             focus;
+  uint16_t            iconSize;
+  uint8_t             icon[WM_ICON_RECORDS];
+} WmMakeJob;
+
+/// @struct WmWindowJob
+///
+/// @brief What another overlay hands the Window overlay to make or take
+/// away a window.
+///
+/// @param state The window manager's state.
+/// @param create The window to make, as a client asks, or NULL to take away
+///   window.
+/// @param pid The client the window is made for.
+/// @param window The window to take away.
+typedef struct WmWindowJob {
+  WmState             *state;
+  WinCreateWindowArgs *create;
+  ProcessId            pid;
+  uint8_t              window;
+} WmWindowJob;
+
+/// @struct WmDialogJob
+///
+/// @brief What the Dialogs overlay hands the Files overlay about a file
+/// dialog, and what the Files overlay wants it to do in turn.
+///
+/// @param state The window manager's state.
+/// @param window The file dialog.
+/// @param dialog Its WmDialog.
+/// @param event An event about its widgets, or NULL.
+/// @param listing A listing its client sent, or NULL.
+/// @param initial The initial path, for wmFilesStart.
+/// @param result The WIN_RESULT_* its own message ended with.
+/// @param checked Out:  whether the listing taken answered a check of the
+///   path chosen.
+/// @param errorNumber Out:  why the path checked has no entry, or 0.
+/// @param kind Out:  the WIN_ENTRY_* of the path checked.
+/// @param placesShown Out:  whether a directory was shown, whose place is
+///   then highlighted.
+/// @param ask Out:  the text of a message to open over it, on the heap, or
+///   NULL.
+typedef struct WmDialogJob {
+  WmState                    *state;
+  WmWindow                   *window;
+  WmDialog                   *dialog;
+  const WinEvent             *event;
+  const WinDialogListingArgs *listing;
+  const char                 *initial;
+  uint8_t                     result;
+  bool                        checked;
+  uint8_t                     errorNumber;
+  uint8_t                     kind;
+  bool                        placesShown;
+  char                       *ask;
+} WmDialogJob;
 
 /// @fn static bool wmIntersect(const GfxRect *first, const GfxRect *second,
 ///   GfxRect *result)
@@ -1412,7 +1657,7 @@ WM_SHARED void wmDamageButton(WmState *state, uint8_t id, uint8_t button) {
 /// @fn static void wmDamageDecorations(WmState *state, uint8_t id)
 ///
 /// @brief Repaint a window's border and title bar, which show whether it's
-/// active.
+/// active:  that window alone, where it shows.
 ///
 /// @param state The window manager's state.
 /// @param id The window's identifier, or 0 for none.
@@ -1433,7 +1678,7 @@ WM_SHARED void wmDamageDecorations(WmState *state, uint8_t id) {
   };
 
   for (uint8_t ii = 0; ii < (sizeof(sides) / sizeof(sides[0])); ii++) {
-    wmDamage(state, &sides[ii]);
+    wmDamageOwned(state, &sides[ii], id);
   }
 }
 
@@ -1513,6 +1758,102 @@ WM_SHARED WmWindow* wmTopNormal(WmState *state) {
       && (window->state != WIN_STATE_MINIMIZED)
     ) {
       return window;
+    }
+  }
+
+  return NULL;
+}
+
+/// @fn static void wmDialogFree(WmDialog *dialog)
+///
+/// @brief Free a stock dialog's WmDialog and what it holds.
+///
+/// @param dialog The WmDialog, or NULL.
+///
+/// @return This function returns no value.
+WM_SHARED void wmDialogFree(WmDialog *dialog) {
+  if (dialog != NULL) {
+    free(dialog->suffix);
+    free(dialog->directory);
+    free(dialog->places);
+    free(dialog->listing);
+    free(dialog);
+  }
+}
+
+/// @fn static WmWindow* wmRoot(WmState *state, WmWindow *window)
+///
+/// @brief Find the window at the top of a window's chain of owners.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+///
+/// @return Returns the window that owns the chain, which is the window itself
+/// if nothing owns it.
+WM_SHARED WmWindow* wmRoot(WmState *state, WmWindow *window) {
+  WmWindow *owner = wmFind(state, window->ownerWindow);
+
+  while (owner != NULL) {
+    window = owner;
+    owner = wmFind(state, window->ownerWindow);
+  }
+
+  return window;
+}
+
+/// @fn static bool wmOwns(WmState *state, const WmWindow *owner,
+///   const WmWindow *window)
+///
+/// @brief Find whether a window is owned by another, directly or through a
+/// chain of owners.
+///
+/// @param state The window manager's state.
+/// @param owner The possible owner.
+/// @param window The window.
+///
+/// @return Returns true if owner owns window, false otherwise, and false for
+/// the same window.
+WM_SHARED bool wmOwns(WmState *state, const WmWindow *owner,
+  const WmWindow *window
+) {
+  const WmWindow *up = wmFind(state, window->ownerWindow);
+
+  while (up != NULL) {
+    if (up->id == owner->id) {
+      return true;
+    }
+
+    up = wmFind(state, up->ownerWindow);
+  }
+
+  return false;
+}
+
+/// @fn static WmWindow* wmModalFor(WmState *state, WmWindow *window)
+///
+/// @brief Find the modal window that takes a window's input instead of it:
+/// the frontmost shown modal window of its family that neither is it nor
+/// owns it.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+///
+/// @return Returns the modal window, or NULL if the window takes its own
+/// input.
+WM_SHARED WmWindow* wmModalFor(WmState *state, WmWindow *window) {
+  WmWindow *root = wmRoot(state, window);
+
+  for (int ii = state->numWindows - 1; ii >= 0; ii--) {
+    WmWindow *modal = &state->windows[ii];
+    if (((modal->flags & WIN_FLAG_MODAL) != 0)
+      && (modal->state != WIN_STATE_MINIMIZED)
+      && wmOwns(state, root, modal)
+    ) {
+      if ((modal == window) || wmOwns(state, modal, window)) {
+        return NULL;
+      }
+
+      return modal;
     }
   }
 

@@ -392,12 +392,16 @@ static uint8_t wmAddTemplate(WmState *state, WmWindow *window,
 /// @return Always returns the provided pointer.
 void* wmTemplateAdd(void *args) {
   WmTemplateJob *job = (WmTemplateJob*) args;
-  if ((job->widgets != NULL) && (job->size == WIN_RECORD_HEADER_SIZE)
+  job->status = WIN_ERR_NOT_SUPPORTED;
+
+  if ((job->widgets != NULL) && (job->size >= WIN_RECORD_HEADER_SIZE)
     && (job->widgets[WIN_RECORD_KIND] == WIN_WIDGET_TEXT_GRID)
   ) {
     callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Resize", "wmResizeMakeGrid",
       job);
-  } else {
+  }
+
+  if (job->status == WIN_ERR_NOT_SUPPORTED) {
     job->status = wmAddTemplate(job->state, job->window, job->widgets,
       job->size);
   }

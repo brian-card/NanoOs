@@ -254,7 +254,8 @@ static void wmPost(WmState *state, WmClient *client) {
 /// @fn void* wmClientFlush(void *args)
 ///
 /// @brief Hand each event the other overlays left in the outbox to its
-/// client, collect the events messages clients have finished with, and send
+/// client, or keep it for the Dialogs overlay if it is about a stock dialog,
+/// collect the events messages clients have finished with, and send
 /// what's waiting, first releasing a text field's held WIN_EVENT_CHANGED
 /// once the field has been quiet for WM_CHANGED_QUIET_MS.
 ///
@@ -274,9 +275,20 @@ void* wmClientFlush(void *args) {
   }
 
   for (uint8_t ii = 0; ii < state->numOutbox; ii++) {
+    const WinEvent *event = &state->outbox[ii].event;
+    WmWindow *window = wmFind(state, event->window);
     WmClient *client = wmClientFind(state, state->outbox[ii].pid);
-    if (client != NULL) {
-      wmQueue(client, &state->outbox[ii].event);
+
+    // A stock dialog's own events are the Dialogs overlay's, not its client's.
+    if ((window != NULL) && (window->dialog != NULL)
+      && (event->type != WIN_EVENT_DIALOG_RESULT)
+      && (event->type != WIN_EVENT_DIALOG_LIST_REQUEST)
+    ) {
+      if (state->numDialogEvents < WM_MAX_DIALOG_EVENTS) {
+        state->dialogEvents[state->numDialogEvents++] = *event;
+      }
+    } else if (client != NULL) {
+      wmQueue(client, event);
     }
   }
 
@@ -291,6 +303,30 @@ void* wmClientFlush(void *args) {
   }
 
   state->eventsWaiting |= (state->heldWindow != 0);
+
+  return args;
+}
+
+/// @fn void* wmClientTime(void *args)
+///
+/// @brief Keep how long a frame took, from state->timedStart to
+/// state->timedEnd, among the times of its kind, state->timedKind, for main.
+///
+/// @param args The window manager's state.
+///
+/// @return Always returns the provided pointer.
+void* wmClientTime(void *args) {
+  WmState *state = (WmState*) args;
+  const struct timespec *start = state->timedStart;
+  WmTimes *times = &state->times[state->timedKind];
+
+  if (times->count < WM_TIMED_FRAMES) {
+    times->ms[times->count]
+      = (uint16_t) (((state->timedEnd.tv_sec - start->tv_sec) * 1000L)
+      + ((state->timedEnd.tv_nsec - start->tv_nsec) / 1000000L));
+  }
+
+  times->count++;
 
   return args;
 }

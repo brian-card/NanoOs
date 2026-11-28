@@ -231,7 +231,23 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
     return;
   }
 
-  window = wmActivate(state, window);
+  uint8_t id = window->id;
+
+  // The active window is never one a modal window blocks.
+  if ((state->numOwned == 0) || (id == state->active)) {
+    window = wmActivate(state, window);
+  } else {
+    // A press on a window a modal window blocks only activates that one.
+    state->opWindow = id;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Family", "wmFamilyActivate",
+      state);
+
+    if (state->opWindow != id) {
+      return;
+    }
+
+    window = wmFind(state, id);
+  }
 
   state->shown = window->frame;
   state->grabStart = window->frame;
@@ -338,41 +354,6 @@ static void releaseButton(WmState *state, WmWindow *window, int16_t pointX,
   }
 }
 
-/// @fn static void restoreUnderPointer(WmState *state, int16_t pointX)
-///
-/// @brief Restore a maximized window that is being moved by its title bar,
-/// keeping the pointer at the same fraction of the title bar's width, so
-/// that the move goes on with the restored window.
-///
-/// @param state The window manager's state.
-/// @param pointX The pointer's column.
-///
-/// @return This function returns no value.
-static void restoreUnderPointer(WmState *state, int16_t pointX) {
-  state->restoreOnDrag = false;
-  WmWindow *window = wmFind(state, state->grabbed);
-  if (window == NULL) {
-    return;
-  }
-
-  int16_t width = window->frame.w;
-
-  setState(state, window->id, WIN_STATE_NORMAL);
-  window = wmFind(state, state->grabbed);
-  if ((window == NULL) || (width <= 0)) {
-    return;
-  }
-
-  state->offset.x = (int16_t) ((((int32_t) state->offset.x) * window->frame.w)
-    / width);
-  window->frame.x = pointX - state->offset.x;
-  state->shown = window->frame;
-
-  if (!state->liveMove) {
-    state->outline = window->frame;
-  }
-}
-
 /// @fn static void release(WmState *state, int16_t pointX, int16_t pointY)
 ///
 /// @brief End a caption button's press, or a move or resize, putting the
@@ -401,39 +382,6 @@ static void release(WmState *state, int16_t pointX, int16_t pointY) {
 
   memset(&state->outline, 0, sizeof(state->outline));
   state->grab = WM_GRAB_NONE;
-}
-
-/// @fn static void altTab(WmState *state)
-///
-/// @brief Activate the next normal window:  the one at the back, so that
-/// pressing Alt+Tab again goes through them all.  A minimized one is shown
-/// again.
-///
-/// @param state The window manager's state.
-///
-/// @return This function returns no value.
-static void altTab(WmState *state) {
-  for (uint8_t ii = 0; ii < state->numWindows; ii++) {
-    WmWindow *window = &state->windows[ii];
-    if ((window->layer == WIN_LAYER_NORMAL)
-      && ((window->id != state->active)
-        || (window->state == WIN_STATE_MINIMIZED))
-    ) {
-      if (window->state == WIN_STATE_MINIMIZED) {
-        state->opWindow = window->id;
-        state->opState = window->restoreState;
-        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Window",
-          "wmWindowSetState", state);
-        window = wmFind(state, state->opWindow);
-      }
-
-      if (window != NULL) {
-        wmActivate(state, window);
-      }
-
-      return;
-    }
-  }
 }
 
 /// @fn static bool sendToConsole(WmState *state, ProcessMessage **message,
@@ -595,7 +543,8 @@ static void key(WmState *state, const GfxEvent *event) {
     if (event->down == 0) {
       return;
     } else if (event->keycode == GFX_KEY_TAB) {
-      altTab(state);
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Family", "wmFamilyAltTab",
+        state);
     } else if (window != NULL) {
       wmSend(state, window->owner, WIN_EVENT_CLOSE_REQUESTED, window->id);
     }
@@ -670,7 +619,8 @@ void* wmInput(void *args) {
   } else if (state->grab >= WM_GRAB_WIDGET) {
     controls(state, wmFind(state, state->grabbed), "wmControlsPointer");
   } else if (state->restoreOnDrag && (state->grab == WM_GRAB_MOVE)) {
-    restoreUnderPointer(state, event->x);
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Family",
+      "wmFamilyUnmaximize", state);
   } else if ((event->wheel != 0) && (state->grab == WM_GRAB_NONE)
     && ((event->buttons & GFX_BUTTON_LEFT) == 0)
   ) {

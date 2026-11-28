@@ -119,7 +119,7 @@ static void wmWorkArea(WmState *state) {
   }
 }
 
-/// @fn static void wmSetState(WmState *state, WmWindow *window,
+/// @fn static void wmSetOneState(WmState *state, WmWindow *window,
 ///   uint8_t newState)
 ///
 /// @brief Minimize, maximize or restore a window.  Maximizing keeps its
@@ -132,7 +132,9 @@ static void wmWorkArea(WmState *state) {
 /// @param newState The WinState.
 ///
 /// @return This function returns no value.
-static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
+static void wmSetOneState(WmState *state, WmWindow *window,
+  uint8_t newState
+) {
   uint8_t old = window->state;
   if (old == newState) {
     return;
@@ -191,6 +193,79 @@ static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
   }
 }
 
+/// @fn static WmWindow* wmActivateFamily(WmState *state, WmWindow *window)
+///
+/// @brief Activate a window the way a press on it does, which the Family
+/// overlay does once any window has an owner.
+///
+/// @param state The window manager's state.
+/// @param window The window, or NULL to give no window the keys.
+///
+/// @return Returns the window activated, where it now is.
+static WmWindow* wmActivateFamily(WmState *state, WmWindow *window) {
+  if ((window == NULL) || (state->numOwned == 0)) {
+    return wmActivate(state, window);
+  }
+
+  state->opWindow = window->id;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Family", "wmFamilyActivate",
+    state);
+
+  return wmFind(state, state->opWindow);
+}
+
+/// @fn static void wmSetState(WmState *state, WmWindow *window,
+///   uint8_t newState)
+///
+/// @brief Give a window a WinState.  A window and the windows it owns, and
+/// the windows that own it, are minimized and restored together.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+/// @param newState The WinState.
+///
+/// @return This function returns no value.
+static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
+  uint8_t old = window->state;
+
+  if ((state->numOwned == 0) || ((newState != WIN_STATE_MINIMIZED)
+    && (old != WIN_STATE_MINIMIZED))
+  ) {
+    wmSetOneState(state, window, newState);
+    return;
+  }
+
+  uint8_t id = window->id;
+  WmWindow *root = wmRoot(state, window);
+  uint8_t family[WM_MAX_WINDOWS];
+  uint8_t count = 0;
+
+  for (uint8_t ii = 0; ii < state->numWindows; ii++) {
+    WmWindow *member = &state->windows[ii];
+    if ((member == root) || wmOwns(state, root, member)) {
+      family[count++] = member->id;
+    }
+  }
+
+  for (uint8_t ii = 0; ii < count; ii++) {
+    WmWindow *member = wmFind(state, family[ii]);
+    uint8_t memberState = newState;
+
+    if ((newState != WIN_STATE_MINIMIZED) && (member->id != id)) {
+      memberState = member->restoreState;
+    }
+    if ((member->state == WIN_STATE_MINIMIZED)
+      || (newState == WIN_STATE_MINIMIZED)
+    ) {
+      wmSetOneState(state, member, memberState);
+    }
+  }
+
+  if (newState != WIN_STATE_MINIMIZED) {
+    wmActivateFamily(state, wmFind(state, id));
+  }
+}
+
 /// @fn static uint8_t wmTemplate(WmState *state, WmWindow *window,
 ///   const char *function, const uint8_t *widgets, uint16_t size)
 ///
@@ -221,14 +296,29 @@ static uint8_t wmTemplate(WmState *state, WmWindow *window,
 
 /// @fn static void wmRemoveWindow(WmState *state, WmWindow *window)
 ///
-/// @brief Take a window away, repainting where it was.  If it was active or
-/// had the keys, the normal window in front is activated.
+/// @brief Take a window away, repainting where it was, after the windows it
+/// owns, deepest first.  If it was active or had the keys, its owner is
+/// activated, or the normal window in front if it had none.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
 ///
 /// @return This function returns no value.
 static void wmRemoveWindow(WmState *state, WmWindow *window) {
+  uint8_t id = window->id;
+
+  uint8_t ii = 0;
+
+  while (ii < state->numWindows) {
+    if (state->windows[ii].ownerWindow == id) {
+      wmRemoveWindow(state, &state->windows[ii]);
+      ii = 0;
+    } else {
+      ii++;
+    }
+  }
+
+  window = wmFind(state, id);
   if (window->state != WIN_STATE_MINIMIZED) {
     wmDamage(state, &window->frame);
   }
@@ -249,7 +339,13 @@ static void wmRemoveWindow(WmState *state, WmWindow *window) {
 
   free(window->title);
   wmTemplate(state, window, "wmTemplateFree", NULL, 0);
+  wmDialogFree((WmDialog*) window->dialog);
+  uint8_t owner = window->ownerWindow;
   uint8_t index = (uint8_t) (window - state->windows);
+
+  if (owner != 0) {
+    state->numOwned--;
+  }
 
   state->numWindows--;
   memmove(window, window + 1,
@@ -257,7 +353,13 @@ static void wmRemoveWindow(WmState *state, WmWindow *window) {
   wmWorkArea(state);
 
   if (lost) {
-    wmActivate(state, wmTopNormal(state));
+    WmWindow *next = wmFind(state, owner);
+
+    if (next == NULL) {
+      next = wmTopNormal(state);
+    }
+
+    wmActivateFamily(state, next);
   }
 }
 
@@ -348,11 +450,71 @@ static void wmLimit(WmState *state, WmWindow *window) {
   }
 }
 
+/// @fn static WmWindow* wmOwnWindow(WmState *state, ProcessId pid,
+///   uint8_t id, uint8_t *status)
+///
+/// @brief Find a window a request names and check that the sender owns it.
+///
+/// @param state The window manager's state.
+/// @param pid The sender's ProcessId.
+/// @param id The window's identifier.
+/// @param status Where to store WIN_ERR_NOT_FOUND or WIN_ERR_PERMISSION if
+///   the request can't go ahead.
+///
+/// @return Returns the window, or NULL if the request can't go ahead.
+static WmWindow* wmOwnWindow(WmState *state, ProcessId pid, uint8_t id,
+  uint8_t *status
+) {
+  WmWindow *window = wmFind(state, id);
+  if (window == NULL) {
+    *status = WIN_ERR_NOT_FOUND;
+  } else if (window->owner != pid) {
+    *status = WIN_ERR_PERMISSION;
+    window = NULL;
+  }
+
+  return window;
+}
+
+/// @fn static void wmCenter(WmState *state, GfxRect *frame,
+///   const GfxRect *owner)
+///
+/// @brief Put a frame in the middle of its owner's, inside the work area.
+///
+/// @param state The window manager's state.
+/// @param frame The frame, whose size is kept.
+/// @param owner The owner's frame.
+///
+/// @return This function returns no value.
+static void wmCenter(WmState *state, GfxRect *frame, const GfxRect *owner) {
+  const GfxRect *area = &state->workArea;
+  int16_t left = owner->x + ((owner->w - frame->w) / 2);
+  int16_t top = owner->y + ((owner->h - frame->h) / 2);
+
+  if ((left + frame->w) > (area->x + area->w)) {
+    left = area->x + area->w - frame->w;
+  }
+  if (left < area->x) {
+    left = area->x;
+  }
+
+  if ((top + frame->h) > (area->y + area->h)) {
+    top = area->y + area->h - frame->h;
+  }
+  if (top < area->y) {
+    top = area->y;
+  }
+
+  frame->x = left;
+  frame->y = top;
+}
+
 /// @fn static void wmCreateWindow(WmState *state, ProcessId pid,
 ///   WinCreateWindowArgs *args)
 ///
 /// @brief Make a client's window, in front of the others of its layer, and
-/// activate it if it's a normal window or a popup.
+/// activate it if it's a normal window or a popup.  A window with an owner,
+/// which must be one of the client's own, goes in the middle of it.
 ///
 /// @param state The window manager's state.
 /// @param pid The client's ProcessId.
@@ -379,6 +541,15 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
     return;
   }
 
+  WmWindow *owner = NULL;
+
+  if (args->owner != WIN_NONE) {
+    owner = wmOwnWindow(state, pid, args->owner, &args->status);
+    if (owner == NULL) {
+      return;
+    }
+  }
+
   WmWindow window;
   memset(&window, 0, sizeof(window));
   window.layer = args->layer;
@@ -387,6 +558,11 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   window.face = WM_FACE;
   window.frame = args->frame;
   wmLimit(state, &window);
+
+  if (owner != NULL) {
+    window.ownerWindow = owner->id;
+    wmCenter(state, &window.frame, &owner->frame);
+  }
 
   if (args->templateSize != 0) {
     args->status = wmTemplate(state, &window, "wmTemplateAdd",
@@ -418,8 +594,12 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   state->numWindows++;
   wmDamage(state, &window.frame);
 
+  if (window.ownerWindow != 0) {
+    state->numOwned++;
+  }
+
   if ((window.layer == WIN_LAYER_NORMAL) || (window.layer == WIN_LAYER_POPUP)) {
-    wmActivate(state, &state->windows[index]);
+    wmActivateFamily(state, &state->windows[index]);
   }
 
   wmWorkArea(state);
@@ -430,32 +610,6 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
 
   args->window = window.id;
   args->status = WIN_OK;
-}
-
-/// @fn static WmWindow* wmOwnWindow(WmState *state, ProcessId pid,
-///   uint8_t id, uint8_t *status)
-///
-/// @brief Find a window a request names and check that the sender owns it.
-///
-/// @param state The window manager's state.
-/// @param pid The sender's ProcessId.
-/// @param id The window's identifier.
-/// @param status Where to store WIN_ERR_NOT_FOUND or WIN_ERR_PERMISSION if
-///   the request can't go ahead.
-///
-/// @return Returns the window, or NULL if the request can't go ahead.
-static WmWindow* wmOwnWindow(WmState *state, ProcessId pid, uint8_t id,
-  uint8_t *status
-) {
-  WmWindow *window = wmFind(state, id);
-  if (window == NULL) {
-    *status = WIN_ERR_NOT_FOUND;
-  } else if (window->owner != pid) {
-    *status = WIN_ERR_PERMISSION;
-    window = NULL;
-  }
-
-  return window;
 }
 
 /// @fn static void wmSetWindow(WmState *state, ProcessId pid,
@@ -530,6 +684,30 @@ void* wmWindowSetState(void *args) {
 
   if (window != NULL) {
     wmSetState(state, window, state->opState);
+  }
+
+  return args;
+}
+
+/// @fn void* wmWindowJob(void *args)
+///
+/// @brief Make a window for a client as WIN_MSG_CREATE_WINDOW does, or take
+/// one away, for the Dialogs overlay.
+///
+/// @param args A pointer to the WmWindowJob.
+///
+/// @return Always returns the provided pointer.
+void* wmWindowJob(void *args) {
+  WmWindowJob *job = (WmWindowJob*) args;
+  WmState *state = job->state;
+
+  if (job->create != NULL) {
+    wmCreateWindow(state, job->pid, job->create);
+  } else {
+    WmWindow *window = wmFind(state, job->window);
+    if (window != NULL) {
+      wmRemoveWindow(state, window);
+    }
   }
 
   return args;

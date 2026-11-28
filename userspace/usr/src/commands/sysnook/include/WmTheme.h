@@ -159,6 +159,16 @@
 /// @brief The color of the close button's face under the pointer.
 #define WM_CLOSE_HOT 0xFF5555FF
 
+/// @def WM_ICON_WARNING
+///
+/// @brief The color of a warning message's triangle.
+#define WM_ICON_WARNING 0xFFFF55FF
+
+/// @def WM_ICON_ERROR
+///
+/// @brief The color of an error message's circle.
+#define WM_ICON_ERROR 0xAA0000FF
+
 /// @def WM_ANSI_COLORS
 ///
 /// @brief The 16 ANSI colors a text grid's attributes index, black to

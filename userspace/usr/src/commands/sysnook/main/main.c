@@ -506,8 +506,9 @@ static GfxError paint(WmState *state) {
 /// @fn static void timeFrame(WmState *state, uint8_t kind,
 ///   const struct timespec *start)
 ///
-/// @brief Wait until a frame is drawn and keep how long it took since what
-/// it shows happened.
+/// @brief Wait until a frame is drawn and have the Client overlay keep how
+/// long it took since what it shows happened.  The time is taken here, so
+/// that loading that overlay isn't counted.
 ///
 /// @param state The window manager's state.
 /// @param kind The WmTimed the frame belongs to.
@@ -519,15 +520,11 @@ static void timeFrame(WmState *state, uint8_t kind,
   const struct timespec *start
 ) {
   gfxFinish(&state->display);
-  struct timespec now;
-  timespec_get(&now, TIME_UTC);
-  WmTimes *times = &state->times[kind];
-  if (times->count < WM_TIMED_FRAMES) {
-    times->ms[times->count] = (uint16_t) (((now.tv_sec - start->tv_sec)
-      * 1000L) + ((now.tv_nsec - start->tv_nsec) / 1000000L));
-  }
-
-  times->count++;
+  timespec_get(&state->timedEnd, TIME_UTC);
+  state->timedKind = kind;
+  state->timedStart = start;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientTime",
+    state);
 }
 
 /// @fn static bool postsDone(WmState *state)
@@ -625,6 +622,11 @@ static bool run(WmState *state) {
         ) {
           callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client",
             "wmClientMessage", state);
+        } else if ((request == WIN_MSG_OPEN_DIALOG)
+          || (request == WIN_MSG_DIALOG_LISTING)
+        ) {
+          callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Dialogs",
+            "wmDialogsMessage", state);
         } else {
           callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Window",
             "wmWindowMessage", state);
@@ -672,6 +674,19 @@ static bool run(WmState *state) {
     ) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientFlush",
         state);
+
+      // What the stock dialogs answer their events with goes out, and is
+      // painted, before the next wait, which may have no timeout.
+      if (state->numDialogEvents != 0) {
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Dialogs",
+          "wmDialogsEvents", state);
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client",
+          "wmClientFlush", state);
+
+        if (frameNeeded(state)) {
+          paint(state);
+        }
+      }
     }
   }
 }

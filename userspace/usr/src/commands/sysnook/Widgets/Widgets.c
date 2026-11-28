@@ -325,7 +325,8 @@ static void wmPaintBox(WmState *state, const WmWidget *widget,
 ///
 /// @brief Record a text field:  white inside a dark border, an accent one
 /// when it has the focus, its text from its scroll on, a star for each byte
-/// of a password, and the caret before its byte when it has the focus.
+/// of a password, and the caret before its byte when it has the focus, or,
+/// with its whole text selected, the text on the accent color instead.
 ///
 /// @param state The window manager's state.
 /// @param window The field's window.
@@ -353,6 +354,16 @@ static void wmPaintField(WmState *state, const WmWindow *window,
     end = (uint8_t) (scroll + shown);
   }
 
+  bool selected = focused && widget->selected && (end > scroll);
+  GfxColor ink = wmInk(widget);
+
+  if (selected) {
+    GfxRect band = { left, top - 1, (int16_t) ((end - scroll) * glyphW),
+      (int16_t) (state->display.builtInFont.glyphH + 2) };
+    wmFill(cmd, WM_ACCENT, &band);
+    ink = WM_ON_ACCENT;
+  }
+
   if ((widget->flags & WIN_WIDGET_PASSWORD) != 0) {
     for (uint8_t at = scroll; at < end; ) {
       uint8_t run = end - at;
@@ -360,16 +371,14 @@ static void wmPaintField(WmState *state, const WmWindow *window,
         run = sizeof(_wmStars) - 1;
       }
 
-      wmText(cmd, wmInk(widget), left + ((at - scroll) * glyphW), top,
-        _wmStars, run);
+      wmText(cmd, ink, left + ((at - scroll) * glyphW), top, _wmStars, run);
       at += run;
     }
   } else if (end > scroll) {
-    wmText(cmd, wmInk(widget), left, top, &widget->text[scroll],
-      end - scroll);
+    wmText(cmd, ink, left, top, &widget->text[scroll], end - scroll);
   }
 
-  if (focused) {
+  if (focused && (!selected)) {
     GfxRect caret = { left + ((widget->caret - scroll) * glyphW) - 1,
       rect->y + ((rect->h - WM_CARET_HEIGHT) / 2), 1, WM_CARET_HEIGHT };
     wmFill(cmd, WM_TEXT, &caret);
