@@ -14,7 +14,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CHECKER = 'src/kernel/MessageArgs.c'
 HEADER = 'src/kernel/MessageArgs.h'
 OVERLAY_API = 'src/user/NanoOsApi.c'
-OVERLAY_HEADER = 'userspace/usr/include/ExecutiveProcesses.h'
+OVERLAY_HEADER = 'userspace/usr/include/UserMessages.h'
 
 # (name, file, old, new, header?, tests that must fail); old and new may be
 # tuples of replacements made together.
@@ -98,7 +98,7 @@ MUTATIONS = [
      ['storage_left_at_exit_is_a_leak']),
     # The cleanup handler's hook also reclaims a killed process, so both go.
     ('no-kill-or-cleanup-hook', 'src/kernel/Scheduler.c',
-     ('        MESSAGE_ARGS_PROCESS_ENDED(pid, false);\n',
+     ('    MESSAGE_ARGS_PROCESS_ENDED(pid, false);\n',
       '  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId,\n'
       '    processDescriptor->exitSignal == 0);\n'), ('', ''), False,
      ['a_killed_process_storage_is_reclaimed',

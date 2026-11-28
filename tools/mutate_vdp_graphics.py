@@ -180,6 +180,7 @@ MUTATIONS = [
  ('G4-preload-scissor-allowed', [(DRAW, '''    if (walk->preload == true) {
       return GFX_ERR_INVALID_STATE;
     }
+
     vdpScissor(walk, tag, words);''', '''    vdpScissor(walk, tag, words);''')],
   PRELOAD_REFUSED, RED),
  ('G4-scissor-depth-unchecked', [(DRAW, '''    if (draw->clipDepth == GFX_MAX_SCISSOR_DEPTH) {''',
@@ -211,7 +212,8 @@ MUTATIONS = [
   } else if (vdpOutput->owner == PROCESS_ID_NOT_SET) {''', '''  if (vdpOutput->owner == PROCESS_ID_NOT_SET) {''')], SET_UP, RED),
  ('G4-killed-finish-answered', [(GRAPHICS, '''(revoke == true) ? GFX_ERR_NOT_OWNER : VDP_UNKNOWN''',
   '''GFX_ERR_NOT_OWNER''')], KILLED_FINISH, RED),
- ('G5-events-not-queued', [(MAIN, '''          vdpQueueEvent(input->events, &input->eventState, &input->parser);''',
+ ('G5-events-not-queued', [(MAIN, '''          vdpQueueEvent(input->events, &input->eventState, &input->parser,
+            input->numLock);''',
   '''          (void) 0;''')], POINTER, RED),
  ('G5-no-coalescing', [(EVENTS_C, '''  if ((motion == true) && (state->motionQueued == true) && (queue->count > 0)) {''',
   '''  if (false) {''')], COALESCED, RED),
@@ -238,7 +240,7 @@ MUTATIONS = [
       VDP_MAX_IMAGES) == VDP_MAX_IMAGES
   ) {''', '''  } else if (false) {''')], DESTROYED_CURSOR, RED),
  ('G5-no-pointer-at-acquire', [(GRAPHICS, '''  23, 0, 0x89, 4,
-  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2)
+  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2),
 ''', '')], POINTER, RED),
  ('G5-boot-replay-before-setup', [(MAIN, '''    if (vdpOutput.replayText != NULL) {
       vdpWriteText(&vdpOutput, vdpOutput.replayText);

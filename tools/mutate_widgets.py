@@ -59,7 +59,7 @@ CANVAS = SYSNOOK + 'Canvas/Canvas.c'
 
 MUTATIONS = [
  ('no-widget-limit', TEMPLATE,
-  '  if (oldCount + count > WIN_MAX_WIDGETS) {',
+  '  if ((oldCount + count) > WIN_MAX_WIDGETS) {',
   '  if (false) {',
   ['e2e/test_widgets_a_33rd_widget_is_refused_and_nothing_of_it_is_kept']),
  ('no-budget', WM,
@@ -91,9 +91,9 @@ MUTATIONS = [
   ['e2e/test_widgets_buttons_and_boxes_send_exactly_their_commands']),
  ('radio-group-kept', CONTROLS,
   '        other->value = 0;\n        wmDamageWidget(state, window, other);\n'
-  '      }\n    }\n  }\n  wmDamageWidget(state, window, widget);',
+  '      }\n    }\n  }\n\n  wmDamageWidget(state, window, widget);',
   '        wmDamageWidget(state, window, other);\n'
-  '      }\n    }\n  }\n  wmDamageWidget(state, window, widget);',
+  '      }\n    }\n  }\n\n  wmDamageWidget(state, window, widget);',
   ['e2e/test_widgets_buttons_and_boxes_send_exactly_their_commands']),
  ('no-space', CONTROLS,
   "  } else if ((event->keycode != ' ')\n",
@@ -128,7 +128,7 @@ MUTATIONS = [
   ' length - caret - 1);\n    widget->textLength--;\n    widget->caret--;',
   ['e2e/test_widgets_a_text_field_edits_exactly_as_typed']),
  ('no-field-scroll', WM,
-  '  } else if (widget->caret - scroll > shown) {',
+  '  } else if ((widget->caret - scroll) > shown) {',
   '  } else if (false) {',
   ['e2e/test_widgets_a_text_field_scrolls_to_keep_its_caret_in_it']),
  ('scissor-for-every-widget', WIDGETS,
@@ -137,7 +137,7 @@ MUTATIONS = [
   ['e2e/test_widgets_widgets_that_fit_change_the_viewport_no_more_than_one']),
 # Step 4:  lists.
  ('page-moves-only-the-selection', LISTS,
-  '    wmScrollTo(job, (int32_t) list->top + page);\n',
+  '    wmScrollTo(job, ((int32_t) list->top) + page);\n',
   '',
   ['e2e/test_widgets_page_down_shows_the_next_ten_items_exactly']),
  ('thumb-not-proportional', LISTS,
@@ -186,7 +186,7 @@ MUTATIONS = [
   '  return (item[1] & WIN_MENU_SEPARATOR) == 0;',
   ['e2e/test_widgets_a_release_on_a_menu_item_chooses_it_once']),
  ('menu-item-not-set', PROPERTY,
-  '        item[1] = (uint8_t) ((item[1] & ~bits) | (value & bits));\n',
+  '        item[1] = (uint8_t) ((item[1] & (~bits)) | (value & bits));\n',
   '',
   ['e2e/test_widgets_a_release_on_a_menu_item_chooses_it_once']),
  ('hover-does-not-switch', MENUS,
@@ -245,8 +245,11 @@ MUTATIONS = [
   '    sent->x = event->x;',
   ['e2e/test_widgets_a_canvas_reports_the_pointer_in_its_own_coordinates']),
  ('canvas-call-accepted', CANVAS,
-  '  [GFX_CMD_DRAW_TEXT] = WM_TEXT_RECORD,\n};',
-  '  [GFX_CMD_DRAW_TEXT] = WM_TEXT_RECORD,\n  [GFX_CMD_CALL] = GFX_CMD_CALL_SIZE,\n};',
+  '  WM_TEXT_RECORD,             // GFX_CMD_DRAW_TEXT\n};\n'
+  'GFX_STATIC_ASSERT(sizeof(_wmRecordSizes) == (GFX_CMD_DRAW_TEXT + 1),',
+  '  WM_TEXT_RECORD,             // GFX_CMD_DRAW_TEXT\n'
+  '  GFX_CMD_CALL_SIZE,          // GFX_CMD_CALL\n};\n'
+  'GFX_STATIC_ASSERT(sizeof(_wmRecordSizes) == (GFX_CMD_CALL + 1),',
   ['e2e/test_widgets_a_canvas_refuses_records_it_may_not_hold']),
  ('canvas-cut-record-accepted', CANVAS,
   '  return (size > left) ? 0 : size;',

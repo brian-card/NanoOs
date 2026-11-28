@@ -75,7 +75,7 @@ MUTATIONS = [
   '      && overlaps(&state->windows[ii].frame, band)',
   ['e2e/test_terminal_grid_scroll_of_a_covered_grid_repaints_it_exactly']),
  ('no-copy-when-uncovered', GRID,
-  '      if (!grid->noBlit && shown && blittable(state, ii, &band)) {',
+  '      if ((!grid->noBlit) && shown && blittable(state, ii, &band)) {',
   '      if (false && blittable(state, ii, &band)) {',
   ['e2e/test_terminal_grid_scroll_of_an_uncovered_grid_copies_its_pixels']),
  ('paint-every-write', GRID,
@@ -99,10 +99,10 @@ MUTATIONS = [
   ['e2e/test_terminal_grid_resize_snaps_to_whole_cells_and_keeps_its_'
    'cells']),
  ('wrap-a-column-early', PARSE,
-  '  parser->column++;\n'
+  '  parser->column++;\n\n'
   '  if ((parser->column >= parser->columns)\n',
-  '  parser->column++;\n'
-  '  if ((parser->column + 1 >= parser->columns)\n',
+  '  parser->column++;\n\n'
+  '  if (((parser->column + 1) >= parser->columns)\n',
   ['e2e/test_terminal_term_matches_the_console_for_text_and_wraps']),
  ('no-bright-colors', PARSE,
   '      bright = ANSI_COLORS_PER_SET;',
@@ -132,7 +132,7 @@ MUTATIONS = [
   '      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)',
   ['e2e/test_terminal_a_display_cant_send_its_session_input_or_a_size',
    'harness/session/the_output_servicer_cannot_send_a_split_port_input']),
- ('two-session-grids', TEMPLATE,
+ ('two-session-grids', RESIZE,
   '  if ((widgets == NULL) || (size != WIN_RECORD_HEADER_SIZE)',
   '  if ((widgets == NULL) || (size < WIN_RECORD_HEADER_SIZE)',
   ['e2e/test_terminal_only_a_session_grid_gets_a_session_and_only_one']),
@@ -149,7 +149,7 @@ MUTATIONS = [
   '        WIN_EVENT_SESSION_ENDED, window->id);',
   '      WinEvent *event = NULL;',
   ['e2e/test_terminal_a_display_cant_send_its_session_input_or_a_size']),
- ('no-close-on-destroy', TEMPLATE,
+ ('no-close-on-destroy', RESIZE,
   '    windowServerCloseSession(grid->port);',
   '    (void) grid->port;',
   ['e2e/test_terminal_destroying_a_session_window_ends_its_shell']),

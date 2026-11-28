@@ -47,10 +47,12 @@ MUTATIONS = [
  ('H1-split-record', '''  uint8_t *record = gfxCmdBufReserve_(buf, 1 + size);
   if (record != NULL) {
     record[0] = (uint8_t) tag;
+
     if (size > 0) {''', '''  uint8_t *record = gfxCmdBufReserve_(buf, 1);
   if (record != NULL) {
     record[0] = (uint8_t) tag;
     record = gfxCmdBufReserve_(buf, size) - 1;
+
     if (size > 0) {''',
   ['a_record_that_doesnt_fit_goes_whole_into_the_next_submit']),
  ('H2-overflow-unreported', '''      gfxCmdBufFail_(buf, GFX_ERR_CMDBUF_OVERFLOW);
@@ -60,22 +62,22 @@ MUTATIONS = [
  ('H3-output-read-after-free', '''  if (status == GFX_OK) {
     *outImage = args->handle;
   }
+
   MESSAGE_ARGS_FREE(args);
+
   return status;
 }
 
+/// @fn static inline GfxError gfxDestroyImage(''', '''  MESSAGE_ARGS_FREE(args);
 
-// =========================================================================
-// FONTS''', '''  MESSAGE_ARGS_FREE(args);
   if (status == GFX_OK) {
     *outImage = args->handle;
   }
+
   return status;
 }
 
-
-// =========================================================================
-// FONTS''', ['the_client_returns_what_the_driver_wrote']),
+/// @fn static inline GfxError gfxDestroyImage(''', ['the_client_returns_what_the_driver_wrote']),
  ('H4-status-not-preset', '''  *((uint8_t*) args) = GFX_ERR_DEVICE_LOST;
 ''', '', ['the_driver_sees_inputs_and_a_preset_status',
           'a_driver_that_exits_before_answering_is_device_lost',
@@ -84,12 +86,14 @@ MUTATIONS = [
     processMessageRelease(message);
     return GFX_ERR_DEVICE_LOST;
   }
+
   processMessageWaitForDone(message, NULL);''', '''  sendProcessMessageToPid(disp->driverPid, message);
   processMessageWaitForDone(message, NULL);''',
   ['a_driver_that_isnt_running_is_device_lost_without_a_leak']),
  ('H6-failed-one-way-leaked', '''  if (args != NULL) {
     MESSAGE_ARGS_DESTROY(args);
   }
+
   return status;''', '''  return status;''',
   ['a_driver_that_isnt_running_is_device_lost_without_a_leak']),
  ('H7-stack-payload', '''  MESSAGE_ARGS_ALLOCATE(GfxGetErrorArgs, args);''',

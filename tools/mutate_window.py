@@ -143,7 +143,7 @@ MUTATIONS = [
  ('session-anyone-opens', SCHED,
   '  if (caller->processId != schedulerState->windowServerPid) {\n'
   '    return EPERM;\n'
-  '  }\n'
+  '  }\n\n'
   '  ProcessId display = args->display;',
   '  ProcessId display = args->display;',
   ['session/only_the_window_server_opens_a_session']),
@@ -155,10 +155,10 @@ MUTATIONS = [
   '  shell->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;\n'
   '  schedulerSetBaseHalCapabilities(shell);\n'
   '  shell->readyQueue = _schedulerState->readyQueues['
-  'PRIVILEGE_LEVEL_SUPERVISOR];\n'
+  'PRIVILEGE_LEVEL_SUPERVISOR];\n\n'
   '  if (shell->ipcCapabilitiesDynamic) {\n'
   '    schedFree(shell->ipcCapabilities);\n'
-  '  }\n'
+  '  }\n\n'
   '  shell->ipcCapabilities = baseSupervisorIpcCapabilities;\n'
   '  shell->numIpcCapabilities = sizeof(baseSupervisorIpcCapabilities)\n'
   '    / sizeof(baseSupervisorIpcCapabilities[0]);\n'

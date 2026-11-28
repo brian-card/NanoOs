@@ -46,6 +46,7 @@ RESTACK = 'userspace/usr/src/commands/sysnook/Restack/Restack.c'
 DRAW = 'userspace/usr/src/commands/wintest/Draw/Draw.c'
 CANVAS = 'userspace/usr/src/commands/sysnook/Canvas/Canvas.c'
 CLIENT = 'userspace/usr/src/commands/sysnook/Client/Client.c'
+FAMILY = 'userspace/usr/src/commands/sysnook/Family/Family.c'
 BUSY = 'nano-os-sim/test_nook_a_second_nook_is_told_the_display_is_busy'
 PAINTS = 'nano-os-sim/test_nook_paints_its_windows_exactly'
 CALL = 'nano-os-sim/test_nook_window_2s_canvas_draws_the_cells_exactly'
@@ -93,7 +94,7 @@ MUTATIONS = [
   '    gfxCmdSetFgColor(cmd, border);\n'
   '    gfxCmdDrawRect(cmd, frame, false);\n', '')], PAINTS),
  ('W2-no-cell-edges', [(DRAW,
-  '    GfxPoint to = { right, at };\n    winCanvasLine(&canvas, from, to);\n',
+  '    GfxPoint to = { right, at };\n\n    winCanvasLine(&canvas, from, to);\n',
   '    GfxPoint to = { right, at };\n')],
   PAINTS),
  ('W2-preloads-never-called', [(WIDGETS,
@@ -196,7 +197,7 @@ MUTATIONS = [
  ('P5-no-restore-on-drag', [(INPUT,
   '    state->restoreOnDrag = (window->state == WIN_STATE_MAXIMIZED);\n',
   '    state->restoreOnDrag = false;\n')], DRAG_RESTORE),
- ('P5-alt-tab-skips-minimized', [(INPUT,
+ ('P5-alt-tab-skips-minimized', [(FAMILY,
   '      && ((window->id != state->active)\n'
   '        || (window->state == WIN_STATE_MINIMIZED))',
   '      && (window->id != state->active)\n'
@@ -207,7 +208,7 @@ MUTATIONS = [
   '      area.w += 2 * WM_ZONE_OUTSIDE;\n'
   '      area.h += 2 * WM_ZONE_OUTSIDE;\n', '')], OUTSIDE),
  ('P6-no-corner-reach', [(INPUT,
-  '    if (pointY < frame->y + WM_ZONE_CORNER) {\n',
+  '    if (pointY < (frame->y + WM_ZONE_CORNER)) {\n',
   '    if (pointY < frame->y) {\n')], ZONES),
  ('P6-left-limit-moves-the-right', [(MAIN,
   '      target.x = clamp(pointX - state->offset.x, 0, right - WM_MIN_WIDTH);\n'
